@@ -57,6 +57,49 @@ with st.sidebar:
 st.markdown("<h1>GST Recon Pro</h1>", unsafe_allow_html=True)
 st.markdown('<p class="subtitle">AI-Powered reconciliation with Smart Invoice Matching & Financial Insights.</p>', unsafe_allow_html=True)
 
+# ================= SAMPLE TEMPLATES GENERATOR =================
+def generate_sample_templates():
+    # * denotes mandatory, standard names for optional/irrelevant fields
+    cols = [
+        "SUPPLIER GSTIN*", "DOCUMENT NUMBER*", "TAXABLE VALUE*", 
+        "IGST*", "CGST*", "SGST*", 
+        "SUPPLIER NAME", "MY GSTIN", "DOCUMENT DATE"
+    ]
+    
+    sample_data = [
+        ["36CNNPD6299J1ZB", "11/2023-24", 7500, 0, 675, 675, "NESHWARI ENGINEERING", "36ADXFS5154R1ZU", "24-07-2023"],
+        ["08AAACM8473A1ZL", "MEC-439-2023", 13150, 2367, 0, 0, "METALLIZING EQUIPMENT", "36ADXFS5154R1ZU", "26-05-2023"]
+    ]
+    
+    df_sample = pd.DataFrame(sample_data, columns=cols)
+    output = io.BytesIO()
+    
+    with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+        df_sample.to_excel(writer, sheet_name="2B_Template", index=False)
+        df_sample.to_excel(writer, sheet_name="Books_Template", index=False)
+        
+        workbook = writer.book
+        header_format = workbook.add_format({"bold": True, "bg_color": "#1a73e8", "font_color": "white", "border": 1})
+        
+        for sheet_name in ["2B_Template", "Books_Template"]:
+            sheet = writer.sheets[sheet_name]
+            for col_num, col_name in enumerate(cols):
+                sheet.write(0, col_num, col_name, header_format)
+            sheet.set_column('A:I', 22)
+            
+    return output.getvalue()
+
+col_btn, empty_space = st.columns([1, 2])
+with col_btn:
+    st.download_button(
+        label="📥 Download Sample Excel Templates",
+        data=generate_sample_templates(),
+        file_name="GST_Recon_Upload_Templates.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        help="Mandatory fields are marked with an asterisk (*)"
+    )
+st.markdown("<br>", unsafe_allow_html=True)
+
 # ================= SMART FUZZY NORMALIZATION =================
 def normalize_invoice(series):
     return series.astype(str).str.upper().str.replace(r'[^A-Z0-9]', '', regex=True).str.lstrip('0')
@@ -75,10 +118,11 @@ if file_2b and file_pr:
             df_2b = pd.read_excel(file_2b)
             df_pr = pd.read_excel(file_pr)
 
-            df_2b.columns = df_2b.columns.str.strip().str.upper()
-            df_pr.columns = df_pr.columns.str.strip().str.upper()
+            # Strip whitespace, uppercase, AND remove the mandatory asterisk (*) if present
+            df_2b.columns = df_2b.columns.str.replace('*', '', regex=False).str.strip().str.upper()
+            df_pr.columns = df_pr.columns.str.replace('*', '', regex=False).str.strip().str.upper()
 
-            # Ensure extra columns exist gracefully
+            # Ensure extra optional columns exist gracefully
             for df in [df_2b, df_pr]:
                 if "MY GSTIN" not in df.columns: df["MY GSTIN"] = ""
                 if "DOCUMENT DATE" not in df.columns: df["DOCUMENT DATE"] = ""
@@ -213,7 +257,6 @@ if file_2b and file_pr:
             # --- 3. PLOTLY WEB CHARTS (STATUS & TOP 10) ---
             st.markdown("<br>", unsafe_allow_html=True)
             
-            # Status Bar Chart
             chart_data = counts.reset_index()
             chart_data.columns = ["Match Status", "Count"]
             color_map = {
@@ -224,7 +267,6 @@ if file_2b and file_pr:
             fig.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", font=dict(color="#f8fafc", family="Poppins"), showlegend=False, yaxis=dict(title="", categoryorder="total ascending"))
             st.plotly_chart(fig, use_container_width=True)
 
-            # Top 10 Pie Charts
             st.markdown("### 🏆 Top 10 Parties (by Taxable Value)")
             c_pie1, c_pie2 = st.columns(2)
             with c_pie1:
@@ -249,11 +291,9 @@ if file_2b and file_pr:
             with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
                 workbook = writer.book
                 
-                # Setup Formats
                 brand_format = workbook.add_format({"bold": True, "font_size": 18, "bg_color": "#0f172a", "font_color": "#38bdf8", "align": "center", "valign": "vcenter"})
                 dev_format = workbook.add_format({"italic": True, "font_size": 10, "bg_color": "#0f172a", "font_color": "#94a3b8", "align": "center"})
                 
-                # New Format: Blue background with White Characters for ALL headers
                 fmt_blue_white_header = workbook.add_format({
                     "bold": True, "bg_color": "#1a73e8", "font_color": "white", 
                     "border": 1, "text_wrap": True, "align": "center", "valign": "vcenter"
@@ -267,7 +307,6 @@ if file_2b and file_pr:
                 dash.merge_range("A1:M2", "GST RECON PRO - EXECUTIVE SUMMARY", brand_format)
                 dash.merge_range("A3:M3", "Developed by ABHISHEK JAKKULA | jakkulaabhishek5@gmail.com", dev_format)
 
-                # Dashboard: Summary Table
                 dash.write_row("B5", ["Match Status", "Record Count", "Taxable Impact (2B)"], fmt_blue_white_header)
                 dash.set_column('B:B', 25)
                 dash.set_column('C:D', 18)
@@ -293,7 +332,6 @@ if file_2b and file_pr:
                 dash.set_column('L:L', 25)
                 dash.set_column('M:N', 15)
 
-                # Dashboard: Charts
                 pie_chart = workbook.add_chart({'type': 'doughnut'})
                 pie_chart.add_series({
                     'name': 'Status Distribution',
@@ -326,27 +364,22 @@ if file_2b and file_pr:
                 # B. Create Reconciliation Sheet (with Subtotals)
                 sheet_recon = workbook.add_worksheet("Reconciliation")
                 
-                # Write data starting at row 2 (Excel Row 3) to leave space for Subtotals and Headers
                 recon_df.to_excel(writer, sheet_name="Reconciliation", startrow=2, index=False, header=False)
                 
-                # Write Subtotals (Row 0 / Excel Row 1) and Headers (Row 1 / Excel Row 2)
                 for col_num, col_name in enumerate(recon_df.columns):
                     # Write Header (All Blue & White)
                     sheet_recon.write(1, col_num, col_name, fmt_blue_white_header)
                     
-                    # Write Subtotals for numeric columns
                     if pd.api.types.is_numeric_dtype(recon_df[col_name]):
                         col_letter = chr(65 + col_num) 
                         formula = f"=SUBTOTAL(9,{col_letter}3:{col_letter}{max_rows})"
                         sheet_recon.write_formula(0, col_num, formula, fmt_subtotal)
 
-                # Set Column Widths
                 sheet_recon.set_column('A:B', 22)
                 sheet_recon.set_column('C:C', 35)
                 sheet_recon.set_column('D:K', 18)
                 sheet_recon.set_column('L:V', 14)
 
-                # Add auto-filter
                 sheet_recon.autofilter(1, 0, max_rows, len(recon_df.columns) - 1)
 
                 # C. Create Raw Data Sheets
