@@ -92,12 +92,12 @@ if file_2b and file_pr:
             "Taxable Value (PR)": taxable_pr
         })
 
-    final_df = pd.DataFrame(output_rows)
+    final_df = pd.DataFrame(output_rows).fillna("")
 
     st.success("Reconciliation Completed")
     st.dataframe(final_df)
 
-    # ---------------- EXCEL EXPORT ----------------
+    # ---------------- EXCEL GENERATION ----------------
     output = io.BytesIO()
     workbook = xlsxwriter.Workbook(output)
 
@@ -106,35 +106,50 @@ if file_2b and file_pr:
     sheet_2b = workbook.add_worksheet("2B Data")
     sheet_pr = workbook.add_worksheet("PR Data")
 
-    header_format = workbook.add_format({'bold': True, 'bg_color': '#D9E1F2', 'border':1})
+    header_format = workbook.add_format({
+        'bold': True,
+        'bg_color': '#D9E1F2',
+        'border':1
+    })
 
-    # Write Reconciliation
+    # -------- SAFE WRITE FUNCTION --------
+    def safe_write(ws, row, col, value):
+        if pd.isna(value):
+            ws.write(row, col, "")
+        elif isinstance(value, (np.integer, np.int64)):
+            ws.write(row, col, int(value))
+        elif isinstance(value, (np.floating, np.float64)):
+            ws.write(row, col, float(value))
+        else:
+            ws.write(row, col, str(value))
+
+    # -------- WRITE RECONCILIATION --------
     for col_num, col_name in enumerate(final_df.columns):
         recon_sheet.write(0, col_num, col_name, header_format)
 
     for row_num, row_data in enumerate(final_df.values):
         for col_num, cell in enumerate(row_data):
-            recon_sheet.write(row_num+1, col_num, cell)
+            safe_write(recon_sheet, row_num+1, col_num, cell)
 
-    # Write original data
-    df_2b.to_excel(pd.ExcelWriter(output, engine='xlsxwriter'), sheet_name="2B Data")
-
-    # Instead manual writing to avoid conflict
+    # -------- WRITE 2B DATA --------
     for col_num, col_name in enumerate(df_2b.columns):
         sheet_2b.write(0, col_num, col_name, header_format)
+
     for row_num, row_data in enumerate(df_2b.values):
         for col_num, cell in enumerate(row_data):
-            sheet_2b.write(row_num+1, col_num, cell)
+            safe_write(sheet_2b, row_num+1, col_num, cell)
 
+    # -------- WRITE PR DATA --------
     for col_num, col_name in enumerate(df_pr.columns):
         sheet_pr.write(0, col_num, col_name, header_format)
+
     for row_num, row_data in enumerate(df_pr.values):
         for col_num, cell in enumerate(row_data):
-            sheet_pr.write(row_num+1, col_num, cell)
+            safe_write(sheet_pr, row_num+1, col_num, cell)
 
     last_row = len(final_df) + 1
 
-    # ---------------- DASHBOARD FORMULAS ----------------
+    # -------- DASHBOARD COUNTS (Dynamic) --------
     dash_sheet.write("A1","Exact")
     dash_sheet.write("B1", f"=COUNTIF(Reconciliation!A2:A{last_row},\"Exact*\")")
 
@@ -147,42 +162,44 @@ if file_2b and file_pr:
     dash_sheet.write("A4","Value Mismatch")
     dash_sheet.write("B4", f"=COUNTIF(Reconciliation!A2:A{last_row},\"Value Mismatch\")")
 
-    # Pie Chart
-    chart = workbook.add_chart({'type':'pie'})
-    chart.add_series({
+    # -------- PIE CHART --------
+    pie_chart = workbook.add_chart({'type':'pie'})
+    pie_chart.add_series({
         'categories': '=Dashboard!$A$1:$A$4',
         'values': '=Dashboard!$B$1:$B$4',
         'data_labels': {'percentage':True}
     })
-    dash_sheet.insert_chart('D2', chart)
+    dash_sheet.insert_chart('D2', pie_chart)
 
-    # ---------------- TOP 10 2B ----------------
+    # -------- TOP 10 2B --------
     top2b = df_2b.groupby("SUPPLIER NAME")["TAXABLE VALUE"].sum().sort_values(ascending=False).head(10)
+
     dash_sheet.write("A7","Top 10 2B Parties")
     for i,(name,val) in enumerate(top2b.items()):
         dash_sheet.write(i+8,0,name)
         dash_sheet.write(i+8,1,val)
 
-    chart2 = workbook.add_chart({'type':'column'})
-    chart2.add_series({
+    col_chart_2b = workbook.add_chart({'type':'column'})
+    col_chart_2b.add_series({
         'categories': f'=Dashboard!$A$9:$A${8+len(top2b)}',
         'values': f'=Dashboard!$B$9:$B${8+len(top2b)}'
     })
-    dash_sheet.insert_chart('D15', chart2)
+    dash_sheet.insert_chart('D15', col_chart_2b)
 
-    # ---------------- TOP 10 PR ----------------
+    # -------- TOP 10 PR --------
     toppr = df_pr.groupby("SUPPLIER NAME")["TAXABLE VALUE"].sum().sort_values(ascending=False).head(10)
+
     dash_sheet.write("F7","Top 10 PR Parties")
     for i,(name,val) in enumerate(toppr.items()):
         dash_sheet.write(i+8,5,name)
         dash_sheet.write(i+8,6,val)
 
-    chart3 = workbook.add_chart({'type':'column'})
-    chart3.add_series({
+    col_chart_pr = workbook.add_chart({'type':'column'})
+    col_chart_pr.add_series({
         'categories': f'=Dashboard!$F$9:$F${8+len(toppr)}',
         'values': f'=Dashboard!$G$9:$G${8+len(toppr)}'
     })
-    dash_sheet.insert_chart('J15', chart3)
+    dash_sheet.insert_chart('J15', col_chart_pr)
 
     workbook.close()
 
