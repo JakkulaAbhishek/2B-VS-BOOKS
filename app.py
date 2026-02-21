@@ -59,34 +59,23 @@ st.markdown('<p class="subtitle">AI-Powered reconciliation with Smart Invoice Ma
 
 # ================= SAMPLE TEMPLATES GENERATOR =================
 def generate_sample_templates():
-    # * denotes mandatory, standard names for optional/irrelevant fields
-    cols = [
-        "SUPPLIER GSTIN*", "DOCUMENT NUMBER*", "TAXABLE VALUE*", 
-        "IGST*", "CGST*", "SGST*", 
-        "SUPPLIER NAME", "MY GSTIN", "DOCUMENT DATE"
-    ]
-    
+    cols = ["SUPPLIER GSTIN*", "DOCUMENT NUMBER*", "TAXABLE VALUE*", "IGST*", "CGST*", "SGST*", "SUPPLIER NAME", "MY GSTIN", "DOCUMENT DATE"]
     sample_data = [
         ["36CNNPD6299J1ZB", "11/2023-24", 7500, 0, 675, 675, "NESHWARI ENGINEERING", "36ADXFS5154R1ZU", "24-07-2023"],
         ["08AAACM8473A1ZL", "MEC-439-2023", 13150, 2367, 0, 0, "METALLIZING EQUIPMENT", "36ADXFS5154R1ZU", "26-05-2023"]
     ]
-    
     df_sample = pd.DataFrame(sample_data, columns=cols)
     output = io.BytesIO()
-    
     with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
         df_sample.to_excel(writer, sheet_name="2B_Template", index=False)
         df_sample.to_excel(writer, sheet_name="Books_Template", index=False)
-        
         workbook = writer.book
         header_format = workbook.add_format({"bold": True, "bg_color": "#1a73e8", "font_color": "white", "border": 1})
-        
         for sheet_name in ["2B_Template", "Books_Template"]:
             sheet = writer.sheets[sheet_name]
             for col_num, col_name in enumerate(cols):
                 sheet.write(0, col_num, col_name, header_format)
             sheet.set_column('A:I', 22)
-            
     return output.getvalue()
 
 col_btn, empty_space = st.columns([1, 2])
@@ -104,6 +93,47 @@ st.markdown("<br>", unsafe_allow_html=True)
 def normalize_invoice(series):
     return series.astype(str).str.upper().str.replace(r'[^A-Z0-9]', '', regex=True).str.lstrip('0')
 
+# ================= CACHED DATA PROCESSING (Lightning Fast) =================
+@st.cache_data(show_spinner=False)
+def process_data_files(file_2b_bytes, file_pr_bytes):
+    df_2b = pd.read_excel(io.BytesIO(file_2b_bytes))
+    df_pr = pd.read_excel(io.BytesIO(file_pr_bytes))
+
+    # Clean columns & drop mandatory asterisk
+    df_2b.columns = df_2b.columns.str.replace('*', '', regex=False).str.strip().str.upper()
+    df_pr.columns = df_pr.columns.str.replace('*', '', regex=False).str.strip().str.upper()
+
+    for df in [df_2b, df_pr]:
+        if "MY GSTIN" not in df.columns: df["MY GSTIN"] = ""
+        if "DOCUMENT DATE" not in df.columns: df["DOCUMENT DATE"] = ""
+        if "SUPPLIER GSTIN" not in df.columns: df["SUPPLIER GSTIN"] = ""
+        
+        # Ensure string format and uppercase for GSTINs
+        df["SUPPLIER GSTIN"] = df["SUPPLIER GSTIN"].fillna("UNKNOWN").astype(str).str.upper().str.strip()
+
+    numeric_cols = ["TAXABLE VALUE", "IGST", "CGST", "SGST"]
+    for col in numeric_cols:
+        df_2b[col] = pd.to_numeric(df_2b.get(col, 0), errors="coerce").fillna(0)
+        df_pr[col] = pd.to_numeric(df_pr.get(col, 0), errors="coerce").fillna(0)
+
+    # NORMALIZE & CREATE PAN KEYS FOR CROSS-STATE MATCHING
+    df_2b["NORM_DOC"] = normalize_invoice(df_2b["DOCUMENT NUMBER"])
+    df_pr["NORM_DOC"] = normalize_invoice(df_pr["DOCUMENT NUMBER"])
+
+    df_2b["PAN"] = df_2b["SUPPLIER GSTIN"].str[2:12]
+    df_pr["PAN"] = df_pr["SUPPLIER GSTIN"].str[2:12]
+
+    df_2b["PAN_KEY"] = df_2b["PAN"] + "|" + df_2b["NORM_DOC"]
+    df_pr["PAN_KEY"] = df_pr["PAN"] + "|" + df_pr["NORM_DOC"]
+
+    # Internal Duplicate Checker (Books)
+    dup_pr_count = df_pr.duplicated(subset=["PAN_KEY"], keep=False).sum()
+
+    # Merge on PAN_KEY to catch Cross-State matches
+    merged = pd.merge(df_2b, df_pr, on="PAN_KEY", how="outer", suffixes=(" (2B)", " (PR)"), indicator=True)
+    
+    return merged, dup_pr_count, df_2b, df_pr
+
 # ================= FILE UPLOAD =================
 col1, col2 = st.columns(2)
 with col1:
@@ -111,35 +141,13 @@ with col1:
 with col2:
     file_pr = st.file_uploader("📘 Upload Purchase Register", type=["xlsx", "xls"])
 
-# ================= PROCESS =================
+# ================= MAIN LOGIC =================
 if file_2b and file_pr:
     try:
         with st.spinner("🚀 Running Smart Engine & Generating Insights..."):
-            df_2b = pd.read_excel(file_2b)
-            df_pr = pd.read_excel(file_pr)
-
-            # Strip whitespace, uppercase, AND remove the mandatory asterisk (*) if present
-            df_2b.columns = df_2b.columns.str.replace('*', '', regex=False).str.strip().str.upper()
-            df_pr.columns = df_pr.columns.str.replace('*', '', regex=False).str.strip().str.upper()
-
-            # Ensure extra optional columns exist gracefully
-            for df in [df_2b, df_pr]:
-                if "MY GSTIN" not in df.columns: df["MY GSTIN"] = ""
-                if "DOCUMENT DATE" not in df.columns: df["DOCUMENT DATE"] = ""
-
-            numeric_cols = ["TAXABLE VALUE", "IGST", "CGST", "SGST"]
-            for col in numeric_cols:
-                df_2b[col] = pd.to_numeric(df_2b.get(col, 0), errors="coerce").fillna(0)
-                df_pr[col] = pd.to_numeric(df_pr.get(col, 0), errors="coerce").fillna(0)
-
-            # FUZZY LOGIC KEY
-            df_2b["NORM_DOC"] = normalize_invoice(df_2b["DOCUMENT NUMBER"])
-            df_pr["NORM_DOC"] = normalize_invoice(df_pr["DOCUMENT NUMBER"])
-
-            df_2b["KEY"] = df_2b["SUPPLIER GSTIN"].astype(str) + "|" + df_2b["NORM_DOC"]
-            df_pr["KEY"] = df_pr["SUPPLIER GSTIN"].astype(str) + "|" + df_pr["NORM_DOC"]
-
-            merged = pd.merge(df_2b, df_pr, on="KEY", how="outer", suffixes=(" (2B)", " (PR)"), indicator=True)
+            
+            # Use cached function for heavy lifting
+            merged, dup_pr_count, df_2b, df_pr = process_data_files(file_2b.getvalue(), file_pr.getvalue())
 
             merged["Total Tax (2B)"] = merged[["IGST (2B)", "CGST (2B)", "SGST (2B)"]].sum(axis=1)
             merged["Total Tax (PR)"] = merged[["IGST (PR)", "CGST (PR)", "SGST (PR)"]].sum(axis=1)
@@ -150,24 +158,26 @@ if file_2b and file_pr:
             diff = (merged["TAXABLE VALUE (2B)"] - merged["TAXABLE VALUE (PR)"]).abs()
 
             exact_invoice = merged["DOCUMENT NUMBER (2B)"].astype(str).str.upper() == merged["DOCUMENT NUMBER (PR)"].astype(str).str.upper()
+            exact_gstin = merged["SUPPLIER GSTIN (2B)"].astype(str).str.upper() == merged["SUPPLIER GSTIN (PR)"].astype(str).str.upper()
 
-            # Assign Status
+            # Assign Status dynamically based on user Tolerance
             conditions = [
-                (merged["_merge"] == "both") & (diff == 0) & exact_invoice,
-                (merged["_merge"] == "both") & (diff == 0) & ~exact_invoice,
-                (merged["_merge"] == "both") & (diff <= tolerance),
-                (merged["_merge"] == "both") & (diff > tolerance),
+                (merged["_merge"] == "both") & exact_gstin & exact_invoice & (diff == 0),
+                (merged["_merge"] == "both") & exact_gstin & ~exact_invoice & (diff == 0),
+                (merged["_merge"] == "both") & ~exact_gstin,  # Cross-State Match!
+                (merged["_merge"] == "both") & exact_gstin & (diff <= tolerance),
+                (merged["_merge"] == "both") & exact_gstin & (diff > tolerance),
                 (merged["_merge"] == "left_only"),
                 (merged["_merge"] == "right_only")
             ]
             
-            statuses = ["Exact", "Fuzzy Match", "Exact (Tolerance)", "Value Mismatch", "Missing in PR", "Missing in 2B"]
+            statuses = ["Exact", "Fuzzy Match", "Cross-State (PAN Match)", "Exact (Tolerance)", "Value Mismatch", "Missing in PR", "Missing in 2B"]
             merged["Match Status"] = np.select(conditions, statuses, default="Unknown")
 
-            # Assign Detailed Matching Reasons
             reasons = [
                 "Exact match on all fields", 
                 "Matched ignoring special chars", 
+                "Matched on PAN, but State GSTIN differs",
                 f"Matched within ₹{tolerance} tolerance", 
                 "Taxable value mismatch", 
                 "Present only in GSTR-2B", 
@@ -179,7 +189,6 @@ if file_2b and file_pr:
             supplier_pr = merged.get("SUPPLIER NAME (PR)", pd.Series(dtype='object'))
             merged["Supplier Name"] = supplier_2b.combine_first(supplier_pr).fillna("Unknown")
 
-            # --- PRECISE COLUMN ORDERING ---
             recon_df = merged[[
                 "Match Status", "Match Reason", "Supplier Name", 
                 "SUPPLIER GSTIN (2B)", "SUPPLIER GSTIN (PR)", 
@@ -208,17 +217,16 @@ if file_2b and file_pr:
                 "SGST (2B)", "SGST (PR)"
             ]
 
-            # --- CALCULATE TOP 10 PARTIES ---
+            # Calculate Top 10
             top10_2b = recon_df.groupby("Supplier Name")[["Taxable Value (2B)", "Total Tax (2B)"]].sum().nlargest(10, "Taxable Value (2B)").reset_index()
             top10_pr = recon_df.groupby("Supplier Name")[["Taxable Value (PR)", "Total Tax (PR)"]].sum().nlargest(10, "Taxable Value (PR)").reset_index()
-
             counts = recon_df["Match Status"].value_counts()
             
             # --- 1. WEB DASHBOARD: METRICS ---
             st.markdown("### 📊 Live Summary")
             m1, m2, m3, m4 = st.columns(4)
             m1.metric("Total Records", len(recon_df))
-            m2.metric("Total Matches", counts.get("Exact", 0) + counts.get("Fuzzy Match", 0) + counts.get("Exact (Tolerance)", 0))
+            m2.metric("Total Matches", counts.get("Exact", 0) + counts.get("Fuzzy Match", 0) + counts.get("Exact (Tolerance)", 0) + counts.get("Cross-State (PAN Match)", 0))
             m3.metric("Missing in Books", counts.get("Missing in PR", 0))
             m4.metric("Missing in 2B", counts.get("Missing in 2B", 0))
 
@@ -232,6 +240,16 @@ if file_2b and file_pr:
             risk_itc = recon_df[recon_df["Match Status"] == "Missing in 2B"]["Total Tax (PR)"].sum()
 
             insights = []
+            
+            # Trigger Duplicate Warning
+            if dup_pr_count > 0:
+                insights.append(f"⚠️ **ERP Data Warning:** We found **{dup_pr_count}** duplicate invoice entries in your Purchase Register. Please clean your books to avoid double-claiming ITC.")
+
+            # Trigger Cross-State Warning
+            cross_state_count = counts.get("Cross-State (PAN Match)", 0)
+            if cross_state_count > 0:
+                insights.append(f"🔄 **Cross-State Errors Detected:** **{cross_state_count}** invoices matched perfectly on PAN and Invoice Number, but the State GSTIN differs. Your supplier may have billed your wrong branch.")
+
             if miss_pr_pct > 10:
                 insights.append(f"🚨 **High Action Required:** **{miss_pr_pct:.1f}%** of records are missing in your Purchase Register. You have **₹{missed_itc:,.2f}** in unclaimed ITC.")
             elif missed_itc > 0:
@@ -254,14 +272,15 @@ if file_2b and file_pr:
             for insight in insights:
                 st.markdown(f"<div class='insight-box'>{insight}</div>", unsafe_allow_html=True)
 
-            # --- 3. PLOTLY WEB CHARTS (STATUS & TOP 10) ---
+            # --- 3. PLOTLY WEB CHARTS ---
             st.markdown("<br>", unsafe_allow_html=True)
             
             chart_data = counts.reset_index()
             chart_data.columns = ["Match Status", "Count"]
             color_map = {
-                "Exact": "#10b981", "Fuzzy Match": "#38bdf8", "Exact (Tolerance)": "#f59e0b",
-                "Value Mismatch": "#ef4444", "Missing in PR": "#f97316", "Missing in 2B": "#8b5cf6"
+                "Exact": "#10b981", "Fuzzy Match": "#38bdf8", "Cross-State (PAN Match)": "#06b6d4",
+                "Exact (Tolerance)": "#f59e0b", "Value Mismatch": "#ef4444", 
+                "Missing in PR": "#f97316", "Missing in 2B": "#8b5cf6"
             }
             fig = px.bar(chart_data, x="Count", y="Match Status", color="Match Status", color_discrete_map=color_map, text="Count", orientation='h', title="Status Distribution")
             fig.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", font=dict(color="#f8fafc", family="Poppins"), showlegend=False, yaxis=dict(title="", categoryorder="total ascending"))
@@ -293,14 +312,10 @@ if file_2b and file_pr:
                 
                 brand_format = workbook.add_format({"bold": True, "font_size": 18, "bg_color": "#0f172a", "font_color": "#38bdf8", "align": "center", "valign": "vcenter"})
                 dev_format = workbook.add_format({"italic": True, "font_size": 10, "bg_color": "#0f172a", "font_color": "#94a3b8", "align": "center"})
-                
-                fmt_blue_white_header = workbook.add_format({
-                    "bold": True, "bg_color": "#1a73e8", "font_color": "white", 
-                    "border": 1, "text_wrap": True, "align": "center", "valign": "vcenter"
-                })
+                fmt_blue_white_header = workbook.add_format({"bold": True, "bg_color": "#1a73e8", "font_color": "white", "border": 1, "text_wrap": True, "align": "center", "valign": "vcenter"})
                 fmt_subtotal = workbook.add_format({"bold": True, "bg_color": "#f2f2f2", "border": 1, "num_format": "#,##0.00"})
                 
-                # A. Create Dashboard FIRST
+                # A. Dashboard
                 dash = workbook.add_worksheet("Dashboard")
                 dash.hide_gridlines(2)
                 
@@ -317,7 +332,6 @@ if file_2b and file_pr:
                     dash.write_formula(row, 2, f'=COUNTIF(Reconciliation!$A$3:$A${max_rows}, "{status}")')
                     dash.write_formula(row, 3, f'=SUMIF(Reconciliation!$A$3:$A${max_rows}, "{status}", Reconciliation!$L$3:$L${max_rows})')
 
-                # Dashboard: Top 10 Tables
                 dash.write("H5", "Top 10 Suppliers (2B)", fmt_blue_white_header)
                 dash.write_row("H6", ["Supplier Name", "Taxable Value (2B)", "Total Tax (2B)"], fmt_blue_white_header)
                 for r_idx, row in top10_2b.iterrows():
@@ -335,11 +349,11 @@ if file_2b and file_pr:
                 pie_chart = workbook.add_chart({'type': 'doughnut'})
                 pie_chart.add_series({
                     'name': 'Status Distribution',
-                    'categories': f'=Dashboard!$B$6:$B$11',
-                    'values': f'=Dashboard!$C$6:$C$11',
+                    'categories': f'=Dashboard!$B$6:$B$12',
+                    'values': f'=Dashboard!$C$6:$C$12',
                     'data_labels': {'percentage': True}
                 })
-                dash.insert_chart('B13', pie_chart)
+                dash.insert_chart('B14', pie_chart)
 
                 pie_2b = workbook.add_chart({'type': 'pie'})
                 pie_2b.add_series({
@@ -361,30 +375,26 @@ if file_2b and file_pr:
                 pie_pr.set_legend({'position': 'bottom'})
                 dash.insert_chart('L18', pie_pr)
 
-                # B. Create Reconciliation Sheet (with Subtotals)
+                # B. Reconciliation Sheet
                 sheet_recon = workbook.add_worksheet("Reconciliation")
-                
                 recon_df.to_excel(writer, sheet_name="Reconciliation", startrow=2, index=False, header=False)
                 
                 for col_num, col_name in enumerate(recon_df.columns):
-                    # Write Header (All Blue & White)
                     sheet_recon.write(1, col_num, col_name, fmt_blue_white_header)
-                    
                     if pd.api.types.is_numeric_dtype(recon_df[col_name]):
                         col_letter = chr(65 + col_num) 
                         formula = f"=SUBTOTAL(9,{col_letter}3:{col_letter}{max_rows})"
                         sheet_recon.write_formula(0, col_num, formula, fmt_subtotal)
 
-                sheet_recon.set_column('A:B', 22)
+                sheet_recon.set_column('A:B', 25)
                 sheet_recon.set_column('C:C', 35)
                 sheet_recon.set_column('D:K', 18)
                 sheet_recon.set_column('L:V', 14)
-
                 sheet_recon.autofilter(1, 0, max_rows, len(recon_df.columns) - 1)
 
-                # C. Create Raw Data Sheets
-                df_2b.drop(columns=["NORM_DOC", "KEY"], errors="ignore").to_excel(writer, sheet_name="2B Raw", index=False)
-                df_pr.drop(columns=["NORM_DOC", "KEY"], errors="ignore").to_excel(writer, sheet_name="Books Raw", index=False)
+                # C. Raw Data Sheets
+                df_2b.drop(columns=["NORM_DOC", "PAN", "PAN_KEY"], errors="ignore").to_excel(writer, sheet_name="2B Raw", index=False)
+                df_pr.drop(columns=["NORM_DOC", "PAN", "PAN_KEY"], errors="ignore").to_excel(writer, sheet_name="Books Raw", index=False)
 
             st.success("✅ Ultimate Reconciliation Dashboard generated perfectly!")
 
