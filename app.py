@@ -6,7 +6,7 @@ import xlsxwriter
 
 TOLERANCE = 20
 
-st.set_page_config(page_title="GSTR 2B vs Books", layout="wide")
+st.set_page_config(page_title="GST 2B vs Books", layout="wide")
 st.title("GST 2B vs Purchase Reconciliation Tool")
 
 # ---------------- TEMPLATE ----------------
@@ -65,17 +65,17 @@ if file_2b and file_pr:
 
     for _, row in merged.iterrows():
 
-        taxable_2b = float(row.get("TAXABLE VALUE (2B)",0))
-        taxable_pr = float(row.get("TAXABLE VALUE (PR)",0))
+        taxable_2b = float(row.get("TAXABLE VALUE (2B)",0) or 0)
+        taxable_pr = float(row.get("TAXABLE VALUE (PR)",0) or 0)
 
-        igst_2b = float(row.get("IGST (2B)",0))
-        igst_pr = float(row.get("IGST (PR)",0))
+        igst_2b = float(row.get("IGST (2B)",0) or 0)
+        igst_pr = float(row.get("IGST (PR)",0) or 0)
 
-        cgst_2b = float(row.get("CGST (2B)",0))
-        cgst_pr = float(row.get("CGST (PR)",0))
+        cgst_2b = float(row.get("CGST (2B)",0) or 0)
+        cgst_pr = float(row.get("CGST (PR)",0) or 0)
 
-        sgst_2b = float(row.get("SGST (2B)",0))
-        sgst_pr = float(row.get("SGST (PR)",0))
+        sgst_2b = float(row.get("SGST (2B)",0) or 0)
+        sgst_pr = float(row.get("SGST (PR)",0) or 0)
 
         total_2b = igst_2b + cgst_2b + sgst_2b
         total_pr = igst_pr + cgst_pr + sgst_pr
@@ -98,14 +98,14 @@ if file_2b and file_pr:
             supplier = row.get("SUPPLIER NAME (PR)", "")
 
         records.append([
-            status,
-            supplier,
-            row.get("SUPPLIER GSTIN (2B)",""),
-            row.get("SUPPLIER GSTIN (PR)",""),
-            row.get("MY GSTIN (2B)",""),
-            row.get("MY GSTIN (PR)",""),
-            row.get("DOCUMENT NUMBER (2B)",""),
-            row.get("DOCUMENT NUMBER (PR)",""),
+            str(status),
+            str(supplier),
+            str(row.get("SUPPLIER GSTIN (2B)","")),
+            str(row.get("SUPPLIER GSTIN (PR)","")),
+            str(row.get("MY GSTIN (2B)","")),
+            str(row.get("MY GSTIN (PR)","")),
+            str(row.get("DOCUMENT NUMBER (2B)","")),
+            str(row.get("DOCUMENT NUMBER (PR)","")),
             taxable_2b,
             taxable_pr,
             taxable_2b - taxable_pr,
@@ -146,54 +146,52 @@ if file_2b and file_pr:
     sheet_2b = workbook.add_worksheet("2B Data")
     sheet_pr = workbook.add_worksheet("Books Data")
 
-    header_format = workbook.add_format({
-        'bold': True,
-        'bg_color': '#D9E1F2',
-        'border':1
-    })
+    header_format = workbook.add_format({'bold':True,'bg_color':'#D9E1F2','border':1})
 
-    # Write reconciliation safely
+    # Write Reconciliation safely
     for col_num, col in enumerate(columns):
-        recon_sheet.write(0, col_num, col, header_format)
+        recon_sheet.write(0,col_num,col,header_format)
 
-    for r in range(len(records)):
-        for c in range(len(columns)):
-            val = records[r][c]
-            if isinstance(val, (int,float)):
-                recon_sheet.write(r+1,c,float(val))
+    for r,row in enumerate(records):
+        for c,val in enumerate(row):
+            if isinstance(val,(int,float)):
+                recon_sheet.write_number(r+1,c,val)
             else:
-                recon_sheet.write(r+1,c,str(val))
+                recon_sheet.write_string(r+1,c,str(val))
 
-    # Write raw sheets manually
+    # Write raw sheets safely
+    df_2b = df_2b.fillna("")
+    df_pr = df_pr.fillna("")
+
     for col_num, col in enumerate(df_2b.columns):
         sheet_2b.write(0,col_num,col,header_format)
     for r in range(len(df_2b)):
         for c in range(len(df_2b.columns)):
-            sheet_2b.write(r+1,c,str(df_2b.iloc[r,c]))
+            sheet_2b.write_string(r+1,c,str(df_2b.iloc[r,c]))
 
     for col_num, col in enumerate(df_pr.columns):
         sheet_pr.write(0,col_num,col,header_format)
     for r in range(len(df_pr)):
         for c in range(len(df_pr.columns)):
-            sheet_pr.write(r+1,c,str(df_pr.iloc[r,c]))
+            sheet_pr.write_string(r+1,c,str(df_pr.iloc[r,c]))
 
-    # -------- DASHBOARD PIE CHARTS --------
+    # Dashboard Pie Chart
     status_counts = recon_df["Match Status"].value_counts()
 
     dash_sheet.write_row("A1",["Status","Count"],header_format)
     row_index = 1
     for k,v in status_counts.items():
-        dash_sheet.write(row_index,0,k)
-        dash_sheet.write(row_index,1,int(v))
+        dash_sheet.write_string(row_index,0,k)
+        dash_sheet.write_number(row_index,1,int(v))
         row_index += 1
 
-    pie1 = workbook.add_chart({'type':'pie'})
-    pie1.add_series({
+    pie = workbook.add_chart({'type':'pie'})
+    pie.add_series({
         'categories': f'=Dashboard!$A$2:$A${row_index}',
         'values': f'=Dashboard!$B$2:$B${row_index}',
         'data_labels': {'percentage':True}
     })
-    dash_sheet.insert_chart('D2', pie1)
+    dash_sheet.insert_chart('D2',pie)
 
     workbook.close()
 
