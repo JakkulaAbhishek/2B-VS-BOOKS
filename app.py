@@ -2,57 +2,77 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import io
+from datetime import datetime
 
 # ================= CONFIG =================
 TOLERANCE = 20
 MAX_ROWS = 15000
 
-st.set_page_config(page_title="GST Reconciliation", layout="wide")
+st.set_page_config(page_title="GST Reconciliation Suite", layout="wide")
 
-# ================= ULTRA MODERN UI =================
+# ================= CLEAN GOOGLE STYLE UI =================
 st.markdown("""
 <style>
-html, body, [class*="css"] {
-    font-family: 'Inter', sans-serif;
-}
-
-body {
-    background: linear-gradient(135deg, #0f172a, #1e293b);
-    color: white;
-}
-
-h1 {
-    font-weight: 700;
-    color: #38bdf8;
-}
-
-.stFileUploader {
-    background: rgba(255,255,255,0.05);
-    padding: 20px;
-    border-radius: 14px;
-    border: 1px solid rgba(255,255,255,0.1);
-    backdrop-filter: blur(12px);
-}
-
+body {background-color:#f8fafc;}
+h1 {color:#1a73e8;font-weight:600;}
 .stButton>button {
-    background: linear-gradient(90deg,#38bdf8,#6366f1);
-    color: white;
-    border: none;
-    border-radius: 10px;
-    height: 45px;
-    font-weight: 600;
+    background:#1a73e8;
+    color:white;
+    border-radius:8px;
+    height:40px;
 }
-
-.stSuccess {
-    background: rgba(34,197,94,0.15);
-    border-radius: 10px;
+.footer {
+    margin-top:40px;
+    text-align:center;
+    color:#6b7280;
+    font-size:14px;
 }
-
 </style>
 """, unsafe_allow_html=True)
 
-st.title("🚀 GST 2B vs Books Reconciliation Suite")
+st.title("GST 2B vs Books Reconciliation")
 
+# ================= SAMPLE TEMPLATE =================
+def generate_sample_template():
+    sample = pd.DataFrame({
+        "SUPPLIER NAME":[
+            "NESHVARI ENGINEERING AND SERVICES",
+            "METALLIZING EQUIPMENT COMPANY P. LTD."
+        ],
+        "SUPPLIER GSTIN":[
+            "36CNNPD6299J1ZB",
+            "08AAACM8473A1ZL"
+        ],
+        "MY GSTIN":[
+            "36ADXFS5154R1ZU",
+            "36ADXFS5154R1ZU"
+        ],
+        "DOCUMENT NUMBER":[
+            "11/2023-24",
+            "MEC-439-2023"
+        ],
+        "DOCUMENT DATE":[
+            "24-07-2023",
+            "26-05-2023"
+        ],
+        "TAXABLE VALUE":[7500,13150],
+        "IGST":[0,2367],
+        "CGST":[675,0],
+        "SGST":[675,0]
+    })
+    return sample
+
+template = generate_sample_template()
+template_buffer = io.BytesIO()
+template.to_excel(template_buffer, index=False)
+
+st.download_button(
+    "Download Sample Upload Template",
+    template_buffer.getvalue(),
+    "GST_Common_Template.xlsx"
+)
+
+# ================= FILE UPLOAD =================
 col1, col2 = st.columns(2)
 
 with col1:
@@ -73,8 +93,8 @@ if file_2b and file_pr:
     numeric_cols = ["TAXABLE VALUE","IGST","CGST","SGST"]
 
     for col in numeric_cols:
-        df_2b[col] = pd.to_numeric(df_2b.get(col,0), errors="coerce").fillna(0)
-        df_pr[col] = pd.to_numeric(df_pr.get(col,0), errors="coerce").fillna(0)
+        df_2b[col] = pd.to_numeric(df_2b[col], errors="coerce").fillna(0)
+        df_pr[col] = pd.to_numeric(df_pr[col], errors="coerce").fillna(0)
 
     df_2b["KEY"] = df_2b["SUPPLIER GSTIN"].astype(str)+"|"+df_2b["DOCUMENT NUMBER"].astype(str)
     df_pr["KEY"] = df_pr["SUPPLIER GSTIN"].astype(str)+"|"+df_pr["DOCUMENT NUMBER"].astype(str)
@@ -139,13 +159,7 @@ if file_2b and file_pr:
             "Taxable Value (2B)":taxable_2b,
             "Taxable Value (PR)":taxable_pr,
             "Total Tax (2B)":total_2b,
-            "Total Tax (PR)":total_pr,
-            "IGST (2B)":igst_2b,
-            "IGST (PR)":igst_pr,
-            "CGST (2B)":cgst_2b,
-            "CGST (PR)":cgst_pr,
-            "SGST (2B)":sgst_2b,
-            "SGST (PR)":sgst_pr,
+            "Total Tax (PR)":total_pr
         })
 
     recon_df = pd.DataFrame(records)
@@ -163,16 +177,15 @@ if file_2b and file_pr:
             "border":1
         })
 
-        recon_df.to_excel(
-            writer,
-            sheet_name="Reconciliation",
-            startrow=2,
-            index=False,
-            header=False
-        )
+        recon_df.to_excel(writer,
+                          sheet_name="Reconciliation",
+                          startrow=2,
+                          index=False,
+                          header=False)
 
         sheet = writer.sheets["Reconciliation"]
 
+        # Subtotal row
         for col in recon_df.select_dtypes(include=np.number).columns:
             idx = recon_df.columns.get_loc(col)
             col_letter = chr(65+idx)
@@ -182,12 +195,14 @@ if file_2b and file_pr:
                 f"=SUBTOTAL(9,{col_letter}3:{col_letter}{MAX_ROWS})"
             )
 
+        # Header row
         for col_num, col_name in enumerate(recon_df.columns):
             sheet.write(1, col_num, col_name, header_format)
 
         df_2b.to_excel(writer, sheet_name="2B Data", index=False)
         df_pr.to_excel(writer, sheet_name="Books Data", index=False)
 
+        # Dashboard sheet
         dash = workbook.add_worksheet("Dashboard")
 
         dash.write_row("A1",["Status","Count"],header_format)
@@ -211,10 +226,18 @@ if file_2b and file_pr:
 
         dash.insert_chart('D2', pie)
 
-    st.success("Enterprise reconciliation file generated successfully.")
+    st.success("Reconciliation file generated successfully")
 
     st.download_button(
-        "⬇ Download Reconciliation Report",
+        "Download Final Excel",
         output.getvalue(),
-        "GST_Reconciliation_Modern.xlsx"
+        f"GST_Reconciliation_{datetime.now().strftime('%Y%m%d')}.xlsx"
     )
+
+# ================= BRANDING =================
+st.markdown("""
+<div class="footer">
+Developed by <b>ABHISHEK JAKKULA</b><br>
+Email: jakkulaabhishek5@gmail.com
+</div>
+""", unsafe_allow_html=True)
