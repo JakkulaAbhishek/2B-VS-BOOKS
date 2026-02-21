@@ -100,12 +100,6 @@ if file_2b and file_pr:
         records.append([
             str(status),
             str(supplier),
-            str(row.get("SUPPLIER GSTIN (2B)","")),
-            str(row.get("SUPPLIER GSTIN (PR)","")),
-            str(row.get("MY GSTIN (2B)","")),
-            str(row.get("MY GSTIN (PR)","")),
-            str(row.get("DOCUMENT NUMBER (2B)","")),
-            str(row.get("DOCUMENT NUMBER (PR)","")),
             taxable_2b,
             taxable_pr,
             taxable_2b - taxable_pr,
@@ -121,11 +115,8 @@ if file_2b and file_pr:
 
     columns = [
         "Match Status","Supplier Name",
-        "Supplier GSTIN (2B)","Supplier GSTIN (PR)",
-        "My GSTIN (2B)","My GSTIN (PR)",
-        "Document Number (2B)","Document Number (PR)",
         "Taxable Value (2B)","Taxable Value (PR)",
-        "Tax Difference (2B-PR)",
+        "Tax Difference",
         "Total Tax (2B)","Total Tax (PR)",
         "IGST (2B)","IGST (PR)",
         "CGST (2B)","CGST (PR)",
@@ -137,20 +128,31 @@ if file_2b and file_pr:
     st.success("Reconciliation Completed")
     st.dataframe(recon_df)
 
-    # ---------------- EXCEL EXPORT ----------------
+    # ---------------- KPI TILES ----------------
+    total = len(recon_df)
+    exact = len(recon_df[recon_df["Match Status"].str.contains("Exact")])
+    mismatch = len(recon_df[recon_df["Match Status"]=="Value Mismatch"])
+    missing = len(recon_df[recon_df["Match Status"].str.contains("Missing")])
+
+    col1,col2,col3,col4 = st.columns(4)
+
+    col1.metric("Total Records", total)
+    col2.metric("Exact %", f"{round((exact/total)*100,2) if total else 0}%")
+    col3.metric("Mismatch %", f"{round((mismatch/total)*100,2) if total else 0}%")
+    col4.metric("Missing %", f"{round((missing/total)*100,2) if total else 0}%")
+
+    # ---------------- SAFE EXCEL EXPORT ----------------
     output = io.BytesIO()
     workbook = xlsxwriter.Workbook(output)
 
     recon_sheet = workbook.add_worksheet("Reconciliation")
     dash_sheet = workbook.add_worksheet("Dashboard")
-    sheet_2b = workbook.add_worksheet("2B Data")
-    sheet_pr = workbook.add_worksheet("Books Data")
 
-    header_format = workbook.add_format({'bold':True,'bg_color':'#D9E1F2','border':1})
+    header = workbook.add_format({'bold':True,'bg_color':'#D9E1F2','border':1})
 
-    # Write Reconciliation safely
-    for col_num, col in enumerate(columns):
-        recon_sheet.write(0,col_num,col,header_format)
+    # Write reconciliation safely
+    for c,col in enumerate(columns):
+        recon_sheet.write(0,c,col,header)
 
     for r,row in enumerate(records):
         for c,val in enumerate(row):
@@ -159,52 +161,33 @@ if file_2b and file_pr:
             else:
                 recon_sheet.write_string(r+1,c,str(val))
 
-    # Write raw sheets safely
-    df_2b = df_2b.fillna("")
-    df_pr = df_pr.fillna("")
+    # Dashboard Summary
+    dash_sheet.write_row("A1",["Metric","Value"],header)
+    dash_sheet.write_row("A2",["Total Records", total])
+    dash_sheet.write_row("A3",["Exact %", round((exact/total)*100,2) if total else 0])
+    dash_sheet.write_row("A4",["Mismatch %", round((mismatch/total)*100,2) if total else 0])
+    dash_sheet.write_row("A5",["Missing %", round((missing/total)*100,2) if total else 0])
 
-    for col_num, col in enumerate(df_2b.columns):
-        sheet_2b.write(0,col_num,col,header_format)
-    for r in range(len(df_2b)):
-        for c in range(len(df_2b.columns)):
-            sheet_2b.write_string(r+1,c,str(df_2b.iloc[r,c]))
-
-    for col_num, col in enumerate(df_pr.columns):
-        sheet_pr.write(0,col_num,col,header_format)
-    for r in range(len(df_pr)):
-        for c in range(len(df_pr.columns)):
-            sheet_pr.write_string(r+1,c,str(df_pr.iloc[r,c]))
-
-    # Dashboard Pie Chart
+    # Pie Chart
     status_counts = recon_df["Match Status"].value_counts()
+    dash_sheet.write_row("A7",["Status","Count"],header)
 
-    dash_sheet.write_row("A1",["Status","Count"],header_format)
-    row_index = 1
+    row_index=8
     for k,v in status_counts.items():
         dash_sheet.write_string(row_index,0,k)
         dash_sheet.write_number(row_index,1,int(v))
-        row_index += 1
+        row_index+=1
 
     pie = workbook.add_chart({'type':'pie'})
     pie.add_series({
-        'categories': f'=Dashboard!$A$2:$A${row_index}',
-        'values': f'=Dashboard!$B$2:$B${row_index}',
+        'categories': f'=Dashboard!$A$9:$A${row_index}',
+        'values': f'=Dashboard!$B$9:$B${row_index}',
         'data_labels': {'percentage':True}
     })
     dash_sheet.insert_chart('D2',pie)
 
     workbook.close()
 
-    st.download_button(
-        "Download Final Reconciliation Report",
-        output.getvalue(),
-        "GST_Reconciliation_Report.xlsx"
-    )
-
-st.markdown("""
-<hr>
-<center>
-Tool developed by <b>ABHISHEK JAKKULA</b><br>
-GMAIL: jakkulaabhishek5@gmail.com
-</center>
-""", unsafe_allow_html=True)
+    st.download_button("Download Final Report",
+                       output.getvalue(),
+                       "GST_Reconciliation_Report.xlsx")
