@@ -285,56 +285,58 @@ if file_2b and file_pr:
                 # Brand and Header Formats
                 brand_format = workbook.add_format({"bold": True, "font_size": 18, "bg_color": "#0f172a", "font_color": "#38bdf8", "align": "center", "valign": "vcenter"})
                 dev_format = workbook.add_format({"italic": True, "font_size": 10, "bg_color": "#0f172a", "font_color": "#94a3b8", "align": "center"})
-                fmt_blue_white_header = workbook.add_format({"bold": True, "bg_color": "#1a73e8", "font_color": "white", "border": 1, "text_wrap": True, "align": "center", "valign": "vcenter"})
+                
+                # Dark Blue background with White Characters for ALL headers
+                fmt_dark_blue_white = workbook.add_format({
+                    "bold": True, "bg_color": "#0052cc", "font_color": "white", 
+                    "border": 1, "text_wrap": True, "align": "center", "valign": "vcenter"
+                })
                 fmt_subtotal = workbook.add_format({"bold": True, "bg_color": "#f2f2f2", "border": 1, "num_format": "#,##0.00"})
-                
-                # Image-matched Color formats for Reconciliation Sheet
-                fmt_blue = workbook.add_format({"bold": True, "bg_color": "#cce5ff", "border": 1, "text_wrap": True, "align": "center"})
-                fmt_grey = workbook.add_format({"bold": True, "bg_color": "#d9d9d9", "border": 1, "text_wrap": True, "align": "center"})
-                fmt_red = workbook.add_format({"bold": True, "bg_color": "#e6b8b7", "border": 1, "text_wrap": True, "align": "center"})
-                fmt_orange = workbook.add_format({"bold": True, "bg_color": "#fce4d6", "border": 1, "text_wrap": True, "align": "center"})
-                
-                def get_col_format(col_name):
-                    if "Status" in col_name or "Reason" in col_name or "Difference" in col_name: return fmt_blue
-                    if "Supplier Name" in col_name: return fmt_grey
-                    if "(2B)" in col_name: return fmt_red
-                    if "(PR)" in col_name: return fmt_orange
-                    return fmt_grey
 
                 # A. Dashboard
                 dash = workbook.add_worksheet("Dashboard")
                 dash.hide_gridlines(2)
                 
-                dash.merge_range("A1:P2", "GST RECON PRO - EXECUTIVE SUMMARY", brand_format)
-                dash.merge_range("A3:P3", "Developed by ABHISHEK JAKKULA | jakkulaabhishek5@gmail.com", dev_format)
+                dash.merge_range("A1:U2", "GST RECON PRO - EXECUTIVE SUMMARY", brand_format)
+                dash.merge_range("A3:U3", "Developed by ABHISHEK JAKKULA | jakkulaabhishek5@gmail.com", dev_format)
 
-                # Summary Table with IGST and CGST
-                dash.write_row("B5", ["Match Status", "Record Count", "Taxable Impact (2B)", "IGST Impact (2B)", "CGST Impact (2B)"], fmt_blue_white_header)
+                # Summary Table with Both 2B and Books Impact side-by-side
+                dash.write_row("B5", [
+                    "Match Status", "Record Count", 
+                    "Taxable Impact (2B)", "IGST Impact (2B)", "CGST Impact (2B)",
+                    "Taxable Impact (PR)", "IGST Impact (PR)", "CGST Impact (PR)"
+                ], fmt_dark_blue_white)
                 dash.set_column('B:B', 25)
-                dash.set_column('C:F', 18)
+                dash.set_column('C:I', 18)
 
                 for i, status in enumerate(statuses):
                     row = 5 + i
                     dash.write(row, 1, status)
+                    # Record count
                     dash.write_formula(row, 2, f'=COUNTIF(Reconciliation!$A$3:$A${max_rows}, "{status}")')
+                    # 2B Impact (Cols L, Q, S in Recon)
                     dash.write_formula(row, 3, f'=SUMIF(Reconciliation!$A$3:$A${max_rows}, "{status}", Reconciliation!$L$3:$L${max_rows})')
                     dash.write_formula(row, 4, f'=SUMIF(Reconciliation!$A$3:$A${max_rows}, "{status}", Reconciliation!$Q$3:$Q${max_rows})')
                     dash.write_formula(row, 5, f'=SUMIF(Reconciliation!$A$3:$A${max_rows}, "{status}", Reconciliation!$S$3:$S${max_rows})')
+                    # Books Impact (Cols M, R, T in Recon)
+                    dash.write_formula(row, 6, f'=SUMIF(Reconciliation!$A$3:$A${max_rows}, "{status}", Reconciliation!$M$3:$M${max_rows})')
+                    dash.write_formula(row, 7, f'=SUMIF(Reconciliation!$A$3:$A${max_rows}, "{status}", Reconciliation!$R$3:$R${max_rows})')
+                    dash.write_formula(row, 8, f'=SUMIF(Reconciliation!$A$3:$A${max_rows}, "{status}", Reconciliation!$T$3:$T${max_rows})')
 
-                # Top 10 Tables with IGST and CGST
-                dash.write("H5", "Top 10 Suppliers (2B)", fmt_blue_white_header)
-                dash.write_row("H6", ["Supplier Name", "Taxable Value (2B)", "Total Tax (2B)", "IGST (2B)", "CGST (2B)"], fmt_blue_white_header)
+                # Top 10 Tables shifted to K and Q to prevent overlapping
+                dash.write("K5", "Top 10 Suppliers (2B)", fmt_dark_blue_white)
+                dash.write_row("K6", ["Supplier Name", "Taxable Value (2B)", "Total Tax (2B)", "IGST (2B)", "CGST (2B)"], fmt_dark_blue_white)
                 for r_idx, row in top10_2b.iterrows():
-                    dash.write_row(r_idx + 6, 7, [row["Supplier Name"], row["Taxable Value (2B)"], row["Total Tax (2B)"], row["IGST (2B)"], row["CGST (2B)"]])
-                dash.set_column('H:H', 25)
-                dash.set_column('I:L', 15)
+                    dash.write_row(r_idx + 6, 10, [row["Supplier Name"], row["Taxable Value (2B)"], row["Total Tax (2B)"], row["IGST (2B)"], row["CGST (2B)"]])
+                dash.set_column('K:K', 25)
+                dash.set_column('L:O', 15)
 
-                dash.write("N5", "Top 10 Suppliers (Books)", fmt_blue_white_header)
-                dash.write_row("N6", ["Supplier Name", "Taxable Value (PR)", "Total Tax (PR)", "IGST (PR)", "CGST (PR)"], fmt_blue_white_header)
+                dash.write("Q5", "Top 10 Suppliers (Books)", fmt_dark_blue_white)
+                dash.write_row("Q6", ["Supplier Name", "Taxable Value (PR)", "Total Tax (PR)", "IGST (PR)", "CGST (PR)"], fmt_dark_blue_white)
                 for r_idx, row in top10_pr.iterrows():
-                    dash.write_row(r_idx + 6, 13, [row["Supplier Name"], row["Taxable Value (PR)"], row["Total Tax (PR)"], row["IGST (PR)"], row["CGST (PR)"]])
-                dash.set_column('N:N', 25)
-                dash.set_column('O:R', 15)
+                    dash.write_row(r_idx + 6, 16, [row["Supplier Name"], row["Taxable Value (PR)"], row["Total Tax (PR)"], row["IGST (PR)"], row["CGST (PR)"]])
+                dash.set_column('Q:Q', 25)
+                dash.set_column('R:U', 15)
 
                 # Status Distribution Pie Chart
                 pie_chart = workbook.add_chart({'type': 'doughnut'})
@@ -348,27 +350,27 @@ if file_2b and file_pr:
 
                 # Column Chart for Top 10 2B (Includes Taxable, IGST, CGST)
                 bar_2b = workbook.add_chart({'type': 'column'})
-                bar_2b.add_series({'name': 'Taxable', 'categories': f'=Dashboard!$H$7:$H${6 + len(top10_2b)}', 'values': f'=Dashboard!$I$7:$I${6 + len(top10_2b)}'})
-                bar_2b.add_series({'name': 'IGST', 'categories': f'=Dashboard!$H$7:$H${6 + len(top10_2b)}', 'values': f'=Dashboard!$K$7:$K${6 + len(top10_2b)}'})
-                bar_2b.add_series({'name': 'CGST', 'categories': f'=Dashboard!$H$7:$H${6 + len(top10_2b)}', 'values': f'=Dashboard!$L$7:$L${6 + len(top10_2b)}'})
+                bar_2b.add_series({'name': 'Taxable', 'categories': f'=Dashboard!$K$7:$K${6 + len(top10_2b)}', 'values': f'=Dashboard!$L$7:$L${6 + len(top10_2b)}'})
+                bar_2b.add_series({'name': 'IGST', 'categories': f'=Dashboard!$K$7:$K${6 + len(top10_2b)}', 'values': f'=Dashboard!$N$7:$N${6 + len(top10_2b)}'})
+                bar_2b.add_series({'name': 'CGST', 'categories': f'=Dashboard!$K$7:$K${6 + len(top10_2b)}', 'values': f'=Dashboard!$O$7:$O${6 + len(top10_2b)}'})
                 bar_2b.set_title({'name': 'Top 10 Suppliers (2B)'})
-                dash.insert_chart('H18', bar_2b, {'x_scale': 1.2, 'y_scale': 1.2})
+                dash.insert_chart('K18', bar_2b, {'x_scale': 1.2, 'y_scale': 1.2})
 
                 # Column Chart for Top 10 Books (Includes Taxable, IGST, CGST)
                 bar_pr = workbook.add_chart({'type': 'column'})
-                bar_pr.add_series({'name': 'Taxable', 'categories': f'=Dashboard!$N$7:$N${6 + len(top10_pr)}', 'values': f'=Dashboard!$O$7:$O${6 + len(top10_pr)}'})
-                bar_pr.add_series({'name': 'IGST', 'categories': f'=Dashboard!$N$7:$N${6 + len(top10_pr)}', 'values': f'=Dashboard!$Q$7:$Q${6 + len(top10_pr)}'})
-                bar_pr.add_series({'name': 'CGST', 'categories': f'=Dashboard!$N$7:$N${6 + len(top10_pr)}', 'values': f'=Dashboard!$R$7:$R${6 + len(top10_pr)}'})
+                bar_pr.add_series({'name': 'Taxable', 'categories': f'=Dashboard!$Q$7:$Q${6 + len(top10_pr)}', 'values': f'=Dashboard!$R$7:$R${6 + len(top10_pr)}'})
+                bar_pr.add_series({'name': 'IGST', 'categories': f'=Dashboard!$Q$7:$Q${6 + len(top10_pr)}', 'values': f'=Dashboard!$T$7:$T${6 + len(top10_pr)}'})
+                bar_pr.add_series({'name': 'CGST', 'categories': f'=Dashboard!$Q$7:$Q${6 + len(top10_pr)}', 'values': f'=Dashboard!$U$7:$U${6 + len(top10_pr)}'})
                 bar_pr.set_title({'name': 'Top 10 Suppliers (Books)'})
-                dash.insert_chart('N18', bar_pr, {'x_scale': 1.2, 'y_scale': 1.2})
+                dash.insert_chart('Q18', bar_pr, {'x_scale': 1.2, 'y_scale': 1.2})
 
                 # B. Reconciliation Sheet
                 sheet_recon = workbook.add_worksheet("Reconciliation")
                 recon_df.to_excel(writer, sheet_name="Reconciliation", startrow=2, index=False, header=False)
                 
                 for col_num, col_name in enumerate(recon_df.columns):
-                    # Write Header using exact image colors
-                    sheet_recon.write(1, col_num, col_name, get_col_format(col_name))
+                    # Write Header using universal Dark Blue / White characters
+                    sheet_recon.write(1, col_num, col_name, fmt_dark_blue_white)
                     
                     if pd.api.types.is_numeric_dtype(recon_df[col_name]):
                         col_letter = chr(65 + col_num) 
