@@ -99,7 +99,6 @@ def process_data_files(file_2b_bytes, file_pr_bytes):
     df_2b = pd.read_excel(io.BytesIO(file_2b_bytes))
     df_pr = pd.read_excel(io.BytesIO(file_pr_bytes))
 
-    # Clean columns & drop mandatory asterisk
     df_2b.columns = df_2b.columns.str.replace('*', '', regex=False).str.strip().str.upper()
     df_pr.columns = df_pr.columns.str.replace('*', '', regex=False).str.strip().str.upper()
 
@@ -107,8 +106,6 @@ def process_data_files(file_2b_bytes, file_pr_bytes):
         if "MY GSTIN" not in df.columns: df["MY GSTIN"] = ""
         if "DOCUMENT DATE" not in df.columns: df["DOCUMENT DATE"] = ""
         if "SUPPLIER GSTIN" not in df.columns: df["SUPPLIER GSTIN"] = ""
-        
-        # Ensure string format and uppercase for GSTINs
         df["SUPPLIER GSTIN"] = df["SUPPLIER GSTIN"].fillna("UNKNOWN").astype(str).str.upper().str.strip()
 
     numeric_cols = ["TAXABLE VALUE", "IGST", "CGST", "SGST"]
@@ -116,7 +113,6 @@ def process_data_files(file_2b_bytes, file_pr_bytes):
         df_2b[col] = pd.to_numeric(df_2b.get(col, 0), errors="coerce").fillna(0)
         df_pr[col] = pd.to_numeric(df_pr.get(col, 0), errors="coerce").fillna(0)
 
-    # NORMALIZE & CREATE PAN KEYS FOR CROSS-STATE MATCHING
     df_2b["NORM_DOC"] = normalize_invoice(df_2b["DOCUMENT NUMBER"])
     df_pr["NORM_DOC"] = normalize_invoice(df_pr["DOCUMENT NUMBER"])
 
@@ -126,12 +122,9 @@ def process_data_files(file_2b_bytes, file_pr_bytes):
     df_2b["PAN_KEY"] = df_2b["PAN"] + "|" + df_2b["NORM_DOC"]
     df_pr["PAN_KEY"] = df_pr["PAN"] + "|" + df_pr["NORM_DOC"]
 
-    # Internal Duplicate Checker (Books)
     dup_pr_count = df_pr.duplicated(subset=["PAN_KEY"], keep=False).sum()
 
-    # Merge on PAN_KEY to catch Cross-State matches
     merged = pd.merge(df_2b, df_pr, on="PAN_KEY", how="outer", suffixes=(" (2B)", " (PR)"), indicator=True)
-    
     return merged, dup_pr_count, df_2b, df_pr
 
 # ================= FILE UPLOAD =================
@@ -145,8 +138,6 @@ with col2:
 if file_2b and file_pr:
     try:
         with st.spinner("🚀 Running Smart Engine & Generating Insights..."):
-            
-            # Use cached function for heavy lifting
             merged, dup_pr_count, df_2b, df_pr = process_data_files(file_2b.getvalue(), file_pr.getvalue())
 
             merged["Total Tax (2B)"] = merged[["IGST (2B)", "CGST (2B)", "SGST (2B)"]].sum(axis=1)
@@ -160,11 +151,10 @@ if file_2b and file_pr:
             exact_invoice = merged["DOCUMENT NUMBER (2B)"].astype(str).str.upper() == merged["DOCUMENT NUMBER (PR)"].astype(str).str.upper()
             exact_gstin = merged["SUPPLIER GSTIN (2B)"].astype(str).str.upper() == merged["SUPPLIER GSTIN (PR)"].astype(str).str.upper()
 
-            # Assign Status dynamically based on user Tolerance
             conditions = [
                 (merged["_merge"] == "both") & exact_gstin & exact_invoice & (diff == 0),
                 (merged["_merge"] == "both") & exact_gstin & ~exact_invoice & (diff == 0),
-                (merged["_merge"] == "both") & ~exact_gstin,  # Cross-State Match!
+                (merged["_merge"] == "both") & ~exact_gstin,
                 (merged["_merge"] == "both") & exact_gstin & (diff <= tolerance),
                 (merged["_merge"] == "both") & exact_gstin & (diff > tolerance),
                 (merged["_merge"] == "left_only"),
@@ -217,9 +207,9 @@ if file_2b and file_pr:
                 "SGST (2B)", "SGST (PR)"
             ]
 
-            # Calculate Top 10
-            top10_2b = recon_df.groupby("Supplier Name")[["Taxable Value (2B)", "Total Tax (2B)"]].sum().nlargest(10, "Taxable Value (2B)").reset_index()
-            top10_pr = recon_df.groupby("Supplier Name")[["Taxable Value (PR)", "Total Tax (PR)"]].sum().nlargest(10, "Taxable Value (PR)").reset_index()
+            # Calculate Top 10 including IGST and CGST
+            top10_2b = recon_df.groupby("Supplier Name")[["Taxable Value (2B)", "Total Tax (2B)", "IGST (2B)", "CGST (2B)"]].sum().nlargest(10, "Taxable Value (2B)").reset_index()
+            top10_pr = recon_df.groupby("Supplier Name")[["Taxable Value (PR)", "Total Tax (PR)", "IGST (PR)", "CGST (PR)"]].sum().nlargest(10, "Taxable Value (PR)").reset_index()
             counts = recon_df["Match Status"].value_counts()
             
             # --- 1. WEB DASHBOARD: METRICS ---
@@ -240,34 +230,19 @@ if file_2b and file_pr:
             risk_itc = recon_df[recon_df["Match Status"] == "Missing in 2B"]["Total Tax (PR)"].sum()
 
             insights = []
-            
-            # Trigger Duplicate Warning
             if dup_pr_count > 0:
-                insights.append(f"⚠️ **ERP Data Warning:** We found **{dup_pr_count}** duplicate invoice entries in your Purchase Register. Please clean your books to avoid double-claiming ITC.")
-
-            # Trigger Cross-State Warning
-            cross_state_count = counts.get("Cross-State (PAN Match)", 0)
-            if cross_state_count > 0:
-                insights.append(f"🔄 **Cross-State Errors Detected:** **{cross_state_count}** invoices matched perfectly on PAN and Invoice Number, but the State GSTIN differs. Your supplier may have billed your wrong branch.")
-
+                insights.append(f"⚠️ **ERP Data Warning:** We found **{dup_pr_count}** duplicate invoice entries in your Purchase Register.")
+            if counts.get("Cross-State (PAN Match)", 0) > 0:
+                insights.append(f"🔄 **Cross-State Errors:** **{counts.get('Cross-State (PAN Match)', 0)}** invoices matched on PAN, but the State GSTIN differs.")
             if miss_pr_pct > 10:
                 insights.append(f"🚨 **High Action Required:** **{miss_pr_pct:.1f}%** of records are missing in your Purchase Register. You have **₹{missed_itc:,.2f}** in unclaimed ITC.")
             elif missed_itc > 0:
-                insights.append(f"💡 **Cash Flow Opportunity:** You have **₹{missed_itc:,.2f}** of ITC sitting in GSTR-2B that isn't recorded in your books. Claim this to optimize cash flow.")
-                
+                insights.append(f"💡 **Cash Flow Opportunity:** You have **₹{missed_itc:,.2f}** of unclaimed ITC sitting in GSTR-2B.")
             if risk_itc > 0:
-                insights.append(f"⚠️ **Compliance Risk:** **₹{risk_itc:,.2f}** of tax is claimed in your books but missing in GSTR-2B. Follow up with these suppliers to avoid notices.")
-                
-            bad_statuses = ["Missing in PR", "Missing in 2B", "Value Mismatch"]
-            problem_records = recon_df[recon_df["Match Status"].isin(bad_statuses)].copy()
-            if not problem_records.empty:
-                problem_records["Tax Variance"] = (problem_records["Total Tax (2B)"] - problem_records["Total Tax (PR)"]).abs()
-                top_supplier = problem_records.groupby("Supplier Name")["Tax Variance"].sum().sort_values(ascending=False).head(1)
-                if not top_supplier.empty and top_supplier.iloc[0] > 0:
-                    insights.append(f"🏢 **Top Defaulter:** **{top_supplier.index[0]}** is causing the highest variance (₹{top_supplier.iloc[0]:,.2f} mismatch). Focus here first.")
+                insights.append(f"⚠️ **Compliance Risk:** **₹{risk_itc:,.2f}** of tax is claimed in your books but missing in GSTR-2B.")
 
             if not insights:
-                insights.append("✅ **Excellent Health:** Your books are exceptionally well-reconciled with GSTR-2B. No major financial risks detected.")
+                insights.append("✅ **Excellent Health:** Your books are perfectly reconciled with GSTR-2B.")
 
             for insight in insights:
                 st.markdown(f"<div class='insight-box'>{insight}</div>", unsafe_allow_html=True)
@@ -286,18 +261,15 @@ if file_2b and file_pr:
             fig.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", font=dict(color="#f8fafc", family="Poppins"), showlegend=False, yaxis=dict(title="", categoryorder="total ascending"))
             st.plotly_chart(fig, use_container_width=True)
 
-            st.markdown("### 🏆 Top 10 Parties (by Taxable Value)")
-            c_pie1, c_pie2 = st.columns(2)
-            with c_pie1:
-                fig_2b = px.pie(top10_2b, names="Supplier Name", values="Taxable Value (2B)", title="Top 10 Suppliers in 2B", hole=0.4)
-                fig_2b.update_layout(paper_bgcolor="rgba(0,0,0,0)", font=dict(color="#f8fafc", family="Poppins"), showlegend=False)
-                fig_2b.update_traces(textposition='inside', textinfo='percent+label')
-                st.plotly_chart(fig_2b, use_container_width=True)
-            with c_pie2:
-                fig_pr = px.pie(top10_pr, names="Supplier Name", values="Taxable Value (PR)", title="Top 10 Suppliers in Books", hole=0.4)
-                fig_pr.update_layout(paper_bgcolor="rgba(0,0,0,0)", font=dict(color="#f8fafc", family="Poppins"), showlegend=False)
-                fig_pr.update_traces(textposition='inside', textinfo='percent+label')
-                st.plotly_chart(fig_pr, use_container_width=True)
+            # Top 10 Grouped Bar Charts showing Taxable, IGST, and CGST
+            st.markdown("### 🏆 Top 10 Parties (Taxable, IGST & CGST Impact)")
+            fig_2b = px.bar(top10_2b, x="Supplier Name", y=["Taxable Value (2B)", "IGST (2B)", "CGST (2B)"], barmode="group", title="Top 10 Suppliers in 2B")
+            fig_2b.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", font=dict(color="#f8fafc", family="Poppins"), legend_title_text="Value Type")
+            st.plotly_chart(fig_2b, use_container_width=True)
+
+            fig_pr = px.bar(top10_pr, x="Supplier Name", y=["Taxable Value (PR)", "IGST (PR)", "CGST (PR)"], barmode="group", title="Top 10 Suppliers in Books")
+            fig_pr.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", font=dict(color="#f8fafc", family="Poppins"), legend_title_text="Value Type")
+            st.plotly_chart(fig_pr, use_container_width=True)
 
             # --- 4. DATA PREVIEW ---
             st.markdown("#### 🔎 Filter & Preview Data")
@@ -310,42 +282,61 @@ if file_2b and file_pr:
             with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
                 workbook = writer.book
                 
+                # Brand and Header Formats
                 brand_format = workbook.add_format({"bold": True, "font_size": 18, "bg_color": "#0f172a", "font_color": "#38bdf8", "align": "center", "valign": "vcenter"})
                 dev_format = workbook.add_format({"italic": True, "font_size": 10, "bg_color": "#0f172a", "font_color": "#94a3b8", "align": "center"})
                 fmt_blue_white_header = workbook.add_format({"bold": True, "bg_color": "#1a73e8", "font_color": "white", "border": 1, "text_wrap": True, "align": "center", "valign": "vcenter"})
                 fmt_subtotal = workbook.add_format({"bold": True, "bg_color": "#f2f2f2", "border": 1, "num_format": "#,##0.00"})
                 
+                # Image-matched Color formats for Reconciliation Sheet
+                fmt_blue = workbook.add_format({"bold": True, "bg_color": "#cce5ff", "border": 1, "text_wrap": True, "align": "center"})
+                fmt_grey = workbook.add_format({"bold": True, "bg_color": "#d9d9d9", "border": 1, "text_wrap": True, "align": "center"})
+                fmt_red = workbook.add_format({"bold": True, "bg_color": "#e6b8b7", "border": 1, "text_wrap": True, "align": "center"})
+                fmt_orange = workbook.add_format({"bold": True, "bg_color": "#fce4d6", "border": 1, "text_wrap": True, "align": "center"})
+                
+                def get_col_format(col_name):
+                    if "Status" in col_name or "Reason" in col_name or "Difference" in col_name: return fmt_blue
+                    if "Supplier Name" in col_name: return fmt_grey
+                    if "(2B)" in col_name: return fmt_red
+                    if "(PR)" in col_name: return fmt_orange
+                    return fmt_grey
+
                 # A. Dashboard
                 dash = workbook.add_worksheet("Dashboard")
                 dash.hide_gridlines(2)
                 
-                dash.merge_range("A1:M2", "GST RECON PRO - EXECUTIVE SUMMARY", brand_format)
-                dash.merge_range("A3:M3", "Developed by ABHISHEK JAKKULA | jakkulaabhishek5@gmail.com", dev_format)
+                dash.merge_range("A1:P2", "GST RECON PRO - EXECUTIVE SUMMARY", brand_format)
+                dash.merge_range("A3:P3", "Developed by ABHISHEK JAKKULA | jakkulaabhishek5@gmail.com", dev_format)
 
-                dash.write_row("B5", ["Match Status", "Record Count", "Taxable Impact (2B)"], fmt_blue_white_header)
+                # Summary Table with IGST and CGST
+                dash.write_row("B5", ["Match Status", "Record Count", "Taxable Impact (2B)", "IGST Impact (2B)", "CGST Impact (2B)"], fmt_blue_white_header)
                 dash.set_column('B:B', 25)
-                dash.set_column('C:D', 18)
+                dash.set_column('C:F', 18)
 
                 for i, status in enumerate(statuses):
                     row = 5 + i
                     dash.write(row, 1, status)
                     dash.write_formula(row, 2, f'=COUNTIF(Reconciliation!$A$3:$A${max_rows}, "{status}")')
                     dash.write_formula(row, 3, f'=SUMIF(Reconciliation!$A$3:$A${max_rows}, "{status}", Reconciliation!$L$3:$L${max_rows})')
+                    dash.write_formula(row, 4, f'=SUMIF(Reconciliation!$A$3:$A${max_rows}, "{status}", Reconciliation!$Q$3:$Q${max_rows})')
+                    dash.write_formula(row, 5, f'=SUMIF(Reconciliation!$A$3:$A${max_rows}, "{status}", Reconciliation!$S$3:$S${max_rows})')
 
+                # Top 10 Tables with IGST and CGST
                 dash.write("H5", "Top 10 Suppliers (2B)", fmt_blue_white_header)
-                dash.write_row("H6", ["Supplier Name", "Taxable Value (2B)", "Total Tax (2B)"], fmt_blue_white_header)
+                dash.write_row("H6", ["Supplier Name", "Taxable Value (2B)", "Total Tax (2B)", "IGST (2B)", "CGST (2B)"], fmt_blue_white_header)
                 for r_idx, row in top10_2b.iterrows():
-                    dash.write_row(r_idx + 6, 7, [row["Supplier Name"], row["Taxable Value (2B)"], row["Total Tax (2B)"]])
+                    dash.write_row(r_idx + 6, 7, [row["Supplier Name"], row["Taxable Value (2B)"], row["Total Tax (2B)"], row["IGST (2B)"], row["CGST (2B)"]])
                 dash.set_column('H:H', 25)
-                dash.set_column('I:J', 15)
+                dash.set_column('I:L', 15)
 
-                dash.write("L5", "Top 10 Suppliers (Books)", fmt_blue_white_header)
-                dash.write_row("L6", ["Supplier Name", "Taxable Value (PR)", "Total Tax (PR)"], fmt_blue_white_header)
+                dash.write("N5", "Top 10 Suppliers (Books)", fmt_blue_white_header)
+                dash.write_row("N6", ["Supplier Name", "Taxable Value (PR)", "Total Tax (PR)", "IGST (PR)", "CGST (PR)"], fmt_blue_white_header)
                 for r_idx, row in top10_pr.iterrows():
-                    dash.write_row(r_idx + 6, 11, [row["Supplier Name"], row["Taxable Value (PR)"], row["Total Tax (PR)"]])
-                dash.set_column('L:L', 25)
-                dash.set_column('M:N', 15)
+                    dash.write_row(r_idx + 6, 13, [row["Supplier Name"], row["Taxable Value (PR)"], row["Total Tax (PR)"], row["IGST (PR)"], row["CGST (PR)"]])
+                dash.set_column('N:N', 25)
+                dash.set_column('O:R', 15)
 
+                # Status Distribution Pie Chart
                 pie_chart = workbook.add_chart({'type': 'doughnut'})
                 pie_chart.add_series({
                     'name': 'Status Distribution',
@@ -355,38 +346,36 @@ if file_2b and file_pr:
                 })
                 dash.insert_chart('B14', pie_chart)
 
-                pie_2b = workbook.add_chart({'type': 'pie'})
-                pie_2b.add_series({
-                    'name': 'Top 10 2B',
-                    'categories': f'=Dashboard!$H$7:$H${6 + len(top10_2b)}',
-                    'values': f'=Dashboard!$I$7:$I${6 + len(top10_2b)}',
-                })
-                pie_2b.set_title({'name': 'Top 10 Suppliers (2B)'})
-                pie_2b.set_legend({'position': 'bottom'})
-                dash.insert_chart('H18', pie_2b)
+                # Column Chart for Top 10 2B (Includes Taxable, IGST, CGST)
+                bar_2b = workbook.add_chart({'type': 'column'})
+                bar_2b.add_series({'name': 'Taxable', 'categories': f'=Dashboard!$H$7:$H${6 + len(top10_2b)}', 'values': f'=Dashboard!$I$7:$I${6 + len(top10_2b)}'})
+                bar_2b.add_series({'name': 'IGST', 'categories': f'=Dashboard!$H$7:$H${6 + len(top10_2b)}', 'values': f'=Dashboard!$K$7:$K${6 + len(top10_2b)}'})
+                bar_2b.add_series({'name': 'CGST', 'categories': f'=Dashboard!$H$7:$H${6 + len(top10_2b)}', 'values': f'=Dashboard!$L$7:$L${6 + len(top10_2b)}'})
+                bar_2b.set_title({'name': 'Top 10 Suppliers (2B)'})
+                dash.insert_chart('H18', bar_2b, {'x_scale': 1.2, 'y_scale': 1.2})
 
-                pie_pr = workbook.add_chart({'type': 'pie'})
-                pie_pr.add_series({
-                    'name': 'Top 10 Books',
-                    'categories': f'=Dashboard!$L$7:$L${6 + len(top10_pr)}',
-                    'values': f'=Dashboard!$M$7:$M${6 + len(top10_pr)}',
-                })
-                pie_pr.set_title({'name': 'Top 10 Suppliers (Books)'})
-                pie_pr.set_legend({'position': 'bottom'})
-                dash.insert_chart('L18', pie_pr)
+                # Column Chart for Top 10 Books (Includes Taxable, IGST, CGST)
+                bar_pr = workbook.add_chart({'type': 'column'})
+                bar_pr.add_series({'name': 'Taxable', 'categories': f'=Dashboard!$N$7:$N${6 + len(top10_pr)}', 'values': f'=Dashboard!$O$7:$O${6 + len(top10_pr)}'})
+                bar_pr.add_series({'name': 'IGST', 'categories': f'=Dashboard!$N$7:$N${6 + len(top10_pr)}', 'values': f'=Dashboard!$Q$7:$Q${6 + len(top10_pr)}'})
+                bar_pr.add_series({'name': 'CGST', 'categories': f'=Dashboard!$N$7:$N${6 + len(top10_pr)}', 'values': f'=Dashboard!$R$7:$R${6 + len(top10_pr)}'})
+                bar_pr.set_title({'name': 'Top 10 Suppliers (Books)'})
+                dash.insert_chart('N18', bar_pr, {'x_scale': 1.2, 'y_scale': 1.2})
 
                 # B. Reconciliation Sheet
                 sheet_recon = workbook.add_worksheet("Reconciliation")
                 recon_df.to_excel(writer, sheet_name="Reconciliation", startrow=2, index=False, header=False)
                 
                 for col_num, col_name in enumerate(recon_df.columns):
-                    sheet_recon.write(1, col_num, col_name, fmt_blue_white_header)
+                    # Write Header using exact image colors
+                    sheet_recon.write(1, col_num, col_name, get_col_format(col_name))
+                    
                     if pd.api.types.is_numeric_dtype(recon_df[col_name]):
                         col_letter = chr(65 + col_num) 
                         formula = f"=SUBTOTAL(9,{col_letter}3:{col_letter}{max_rows})"
                         sheet_recon.write_formula(0, col_num, formula, fmt_subtotal)
 
-                sheet_recon.set_column('A:B', 25)
+                sheet_recon.set_column('A:B', 22)
                 sheet_recon.set_column('C:C', 35)
                 sheet_recon.set_column('D:K', 18)
                 sheet_recon.set_column('L:V', 14)
