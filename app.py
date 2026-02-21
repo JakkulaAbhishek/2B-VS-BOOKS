@@ -2,11 +2,12 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import io
+import plotly.express as px
 
 TOLERANCE = 20
 
 st.set_page_config(page_title="GST Reconciliation Pro", layout="wide")
-st.title("🚀 GST 2B vs Books Reconciliation – Enterprise")
+st.title("🚀 GST 2B vs Books – Enterprise Reconciliation Suite")
 
 file_2b = st.file_uploader("Upload GSTR-2B Excel", type=["xlsx"])
 file_pr = st.file_uploader("Upload Purchase Register Excel", type=["xlsx"])
@@ -28,13 +29,8 @@ if file_2b and file_pr:
     df_2b["KEY"] = df_2b["SUPPLIER GSTIN"].astype(str) + "|" + df_2b["DOCUMENT NUMBER"].astype(str)
     df_pr["KEY"] = df_pr["SUPPLIER GSTIN"].astype(str) + "|" + df_pr["DOCUMENT NUMBER"].astype(str)
 
-    merged = pd.merge(
-        df_2b, df_pr,
-        on="KEY",
-        how="outer",
-        suffixes=(" (2B)", " (PR)"),
-        indicator=True
-    )
+    merged = pd.merge(df_2b, df_pr, on="KEY", how="outer",
+                      suffixes=(" (2B)", " (PR)"), indicator=True)
 
     records = []
 
@@ -55,26 +51,22 @@ if file_2b and file_pr:
 
         if row["_merge"] == "both":
             diff = abs(taxable_2b - taxable_pr)
-
             if diff == 0:
                 status = "Exact"
                 reason = "GSTIN + Invoice + Taxable matched"
-
             elif diff <= TOLERANCE:
                 status = "Exact (Tolerance)"
-                reason = "GSTIN + Invoice matched, Taxable within tolerance"
-
+                reason = "Taxable within tolerance"
             else:
                 status = "Value Mismatch"
-                reason = "GSTIN + Invoice matched, Taxable mismatch"
+                reason = "Taxable mismatch"
 
         elif row["_merge"] == "left_only":
             status = "Missing in PR"
-            reason = "Present in 2B but not in Purchase Register"
-
+            reason = "Present in 2B only"
         else:
             status = "Missing in 2B"
-            reason = "Present in Purchase Register but not in 2B"
+            reason = "Present in PR only"
 
         supplier = row.get("SUPPLIER NAME (2B)")
         if pd.isna(supplier):
@@ -84,28 +76,61 @@ if file_2b and file_pr:
             "Match Status": status,
             "Match Reason": reason,
             "Supplier Name": supplier,
-            "Supplier GSTIN (2B)": row.get("SUPPLIER GSTIN (2B)",""),
-            "Supplier GSTIN (PR)": row.get("SUPPLIER GSTIN (PR)",""),
-            "My GSTIN (2B)": row.get("MY GSTIN (2B)",""),
-            "My GSTIN (PR)": row.get("MY GSTIN (PR)",""),
-            "Document Number (2B)": row.get("DOCUMENT NUMBER (2B)",""),
-            "Document Number (PR)": row.get("DOCUMENT NUMBER (PR)",""),
-            "Document Date (2B)": row.get("DOCUMENT DATE (2B)",""),
-            "Document Date (PR)": row.get("DOCUMENT DATE (PR)",""),
-            "Taxable Value (2B)": taxable_2b,
-            "Taxable Value (PR)": taxable_pr,
-            "Tax Difference (2B-PR)": taxable_2b - taxable_pr,
+            "Taxable (2B)": taxable_2b,
+            "Taxable (PR)": taxable_pr,
+            "Difference": taxable_2b - taxable_pr,
             "Total Tax (2B)": total_2b,
             "Total Tax (PR)": total_pr,
             "IGST (2B)": igst_2b,
-            "IGST (PR)": igst_pr,
             "CGST (2B)": cgst_2b,
-            "CGST (PR)": cgst_pr,
             "SGST (2B)": sgst_2b,
+            "IGST (PR)": igst_pr,
+            "CGST (PR)": cgst_pr,
             "SGST (PR)": sgst_pr,
         })
 
     recon_df = pd.DataFrame(records)
+
+    # ---------------- WEB DASHBOARD ----------------
+    st.subheader("📊 Web Dashboard")
+
+    col1, col2 = st.columns(2)
+
+    fig1 = px.pie(recon_df, names="Match Status", title="Matching Status")
+    col1.plotly_chart(fig1, use_container_width=True)
+
+    # Top 10 2B + Others
+    top2b = df_2b.groupby("SUPPLIER NAME")[["TAXABLE VALUE","IGST","CGST","SGST"]].sum()
+    top2b = top2b.sort_values("TAXABLE VALUE", ascending=False)
+
+    top10_2b = top2b.head(10)
+    others_2b = top2b.iloc[10:].sum()
+
+    if len(top2b) > 10:
+        top10_2b.loc["Others"] = others_2b
+
+    fig2 = px.pie(top10_2b, values="TAXABLE VALUE",
+                  names=top10_2b.index,
+                  title="Top 10 Vendors – 2B (Taxable)")
+    col2.plotly_chart(fig2, use_container_width=True)
+
+    st.divider()
+
+    col3, col4 = st.columns(2)
+
+    toppr = df_pr.groupby("SUPPLIER NAME")[["TAXABLE VALUE","IGST","CGST","SGST"]].sum()
+    toppr = toppr.sort_values("TAXABLE VALUE", ascending=False)
+
+    top10_pr = toppr.head(10)
+    others_pr = toppr.iloc[10:].sum()
+
+    if len(toppr) > 10:
+        top10_pr.loc["Others"] = others_pr
+
+    fig3 = px.pie(top10_pr, values="TAXABLE VALUE",
+                  names=top10_pr.index,
+                  title="Top 10 Vendors – PR (Taxable)")
+    col3.plotly_chart(fig3, use_container_width=True)
 
     st.dataframe(recon_df, use_container_width=True)
 
@@ -114,11 +139,9 @@ if file_2b and file_pr:
 
     with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
 
-        recon_df.to_excel(writer, sheet_name="Reconciliation", index=False)
-        df_2b.to_excel(writer, sheet_name="2B Data", index=False)
-        df_pr.to_excel(writer, sheet_name="Purchase Data", index=False)
-
         workbook = writer.book
+
+        # DASHBOARD FIRST
         dash = workbook.add_worksheet("Dashboard")
 
         header = workbook.add_format({
@@ -129,49 +152,53 @@ if file_2b and file_pr:
 
         dash.write("A1","GST RECONCILIATION DASHBOARD",header)
 
-        dash.write("A3","Total Records")
-        dash.write_formula("B3","=COUNTA(Reconciliation!A:A)-1")
+        dash.write_row("A3",["Status","Count"],header)
 
-        dash.write("A4","Exact %")
-        dash.write_formula("B4",'=COUNTIF(Reconciliation!A:A,"Exact")/B3')
+        statuses = recon_df["Match Status"].value_counts()
 
-        dash.write("A5","Mismatch %")
-        dash.write_formula("B5",'=COUNTIF(Reconciliation!A:A,"Value Mismatch")/B3')
-
-        dash.write("A6","Missing %")
-        dash.write_formula("B6",'=COUNTIF(Reconciliation!A:A,"Missing*")/B3')
-
-        # Status Table
-        dash.write_row("A8",["Status","Count"],header)
-
-        dash.write("A9","Exact")
-        dash.write_formula("B9",'=COUNTIF(Reconciliation!A:A,"Exact")')
-
-        dash.write("A10","Value Mismatch")
-        dash.write_formula("B10",'=COUNTIF(Reconciliation!A:A,"Value Mismatch")')
-
-        dash.write("A11","Missing in PR")
-        dash.write_formula("B11",'=COUNTIF(Reconciliation!A:A,"Missing in PR")')
-
-        dash.write("A12","Missing in 2B")
-        dash.write_formula("B12",'=COUNTIF(Reconciliation!A:A,"Missing in 2B")')
+        row = 3
+        for status, count in statuses.items():
+            dash.write(row,0,status)
+            dash.write(row,1,count)
+            row += 1
 
         chart = workbook.add_chart({'type':'pie'})
         chart.add_series({
-            'categories': '=Dashboard!$A$9:$A$12',
-            'values': '=Dashboard!$B$9:$B$12',
+            'categories': f'=Dashboard!$A$4:$A${row}',
+            'values': f'=Dashboard!$B$4:$B${row}',
             'data_labels': {'percentage':True}
         })
+
         dash.insert_chart('D3', chart)
 
-        # Top 10 2B
-        top_2b = df_2b.groupby("SUPPLIER NAME")["TAXABLE VALUE"].sum().sort_values(ascending=False).head(10)
-        top_2b.to_excel(writer, sheet_name="Top10_2B")
+        # RECON SHEET
+        recon_df.to_excel(writer, sheet_name="Reconciliation", index=False)
+        sheet = writer.sheets["Reconciliation"]
 
-        # Top 10 PR
-        top_pr = df_pr.groupby("SUPPLIER NAME")["TAXABLE VALUE"].sum().sort_values(ascending=False).head(10)
-        top_pr.to_excel(writer, sheet_name="Top10_PR")
+        for col_num, value in enumerate(recon_df.columns.values):
+            sheet.write(0, col_num, value, header)
 
-    st.download_button("⬇ Download Final Enterprise Report",
+        # Subtotal row
+        last_row = len(recon_df) + 1
+        sheet.write(f"A{last_row+1}", "TOTAL", header)
+
+        numeric_columns = ["Taxable (2B)","Taxable (PR)","Difference",
+                           "Total Tax (2B)","Total Tax (PR)",
+                           "IGST (2B)","CGST (2B)","SGST (2B)",
+                           "IGST (PR)","CGST (PR)","SGST (PR)"]
+
+        for col in numeric_columns:
+            col_idx = recon_df.columns.get_loc(col)
+            col_letter = chr(65 + col_idx)
+            sheet.write_formula(
+                last_row,
+                col_idx,
+                f"=SUBTOTAL(9,{col_letter}2:{col_letter}{last_row})"
+            )
+
+        df_2b.to_excel(writer, sheet_name="2B Data", index=False)
+        df_pr.to_excel(writer, sheet_name="Purchase Data", index=False)
+
+    st.download_button("⬇ Download Final Enterprise Dashboard Report",
                        output.getvalue(),
                        "GST_Reconciliation_Enterprise.xlsx")
