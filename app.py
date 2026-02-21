@@ -9,20 +9,57 @@ MAX_ROWS = 15000
 
 st.set_page_config(page_title="GST Reconciliation", layout="wide")
 
-# ================= GOOGLE STYLE UI =================
+# ================= ULTRA MODERN UI =================
 st.markdown("""
 <style>
-body {background-color:#f5f5f5;}
-h1 {color:#1a73e8; font-weight:600;}
-div[data-testid="stFileUploader"] {background:white; padding:15px; border-radius:10px;}
-.stButton>button {background:#1a73e8;color:white;border-radius:8px;height:40px;}
+html, body, [class*="css"] {
+    font-family: 'Inter', sans-serif;
+}
+
+body {
+    background: linear-gradient(135deg, #0f172a, #1e293b);
+    color: white;
+}
+
+h1 {
+    font-weight: 700;
+    color: #38bdf8;
+}
+
+.stFileUploader {
+    background: rgba(255,255,255,0.05);
+    padding: 20px;
+    border-radius: 14px;
+    border: 1px solid rgba(255,255,255,0.1);
+    backdrop-filter: blur(12px);
+}
+
+.stButton>button {
+    background: linear-gradient(90deg,#38bdf8,#6366f1);
+    color: white;
+    border: none;
+    border-radius: 10px;
+    height: 45px;
+    font-weight: 600;
+}
+
+.stSuccess {
+    background: rgba(34,197,94,0.15);
+    border-radius: 10px;
+}
+
 </style>
 """, unsafe_allow_html=True)
 
-st.title("GST 2B vs Books Reconciliation")
+st.title("🚀 GST 2B vs Books Reconciliation Suite")
 
-file_2b = st.file_uploader("Upload GSTR-2B Excel", type=["xlsx"])
-file_pr = st.file_uploader("Upload Purchase Register Excel", type=["xlsx"])
+col1, col2 = st.columns(2)
+
+with col1:
+    file_2b = st.file_uploader("Upload GSTR-2B Excel", type=["xlsx"])
+
+with col2:
+    file_pr = st.file_uploader("Upload Purchase Register Excel", type=["xlsx"])
 
 # ================= PROCESS =================
 if file_2b and file_pr:
@@ -113,7 +150,6 @@ if file_2b and file_pr:
 
     recon_df = pd.DataFrame(records)
 
-    # ================= EXCEL GENERATION =================
     output = io.BytesIO()
 
     with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
@@ -127,7 +163,6 @@ if file_2b and file_pr:
             "border":1
         })
 
-        # ---------- RECON SHEET ----------
         recon_df.to_excel(
             writer,
             sheet_name="Reconciliation",
@@ -138,7 +173,6 @@ if file_2b and file_pr:
 
         sheet = writer.sheets["Reconciliation"]
 
-        # Row 1 = Subtotal formulas
         for col in recon_df.select_dtypes(include=np.number).columns:
             idx = recon_df.columns.get_loc(col)
             col_letter = chr(65+idx)
@@ -148,20 +182,12 @@ if file_2b and file_pr:
                 f"=SUBTOTAL(9,{col_letter}3:{col_letter}{MAX_ROWS})"
             )
 
-        # Row 2 = Headers (only once)
         for col_num, col_name in enumerate(recon_df.columns):
             sheet.write(1, col_num, col_name, header_format)
 
-        # Auto width
-        for i, col in enumerate(recon_df.columns):
-            width = max(recon_df[col].astype(str).map(len).max(), len(col)) + 2
-            sheet.set_column(i, i, width)
-
-        # ---------- RAW DATA ----------
         df_2b.to_excel(writer, sheet_name="2B Data", index=False)
         df_pr.to_excel(writer, sheet_name="Books Data", index=False)
 
-        # ---------- DASHBOARD ----------
         dash = workbook.add_worksheet("Dashboard")
 
         dash.write_row("A1",["Status","Count"],header_format)
@@ -185,10 +211,10 @@ if file_2b and file_pr:
 
         dash.insert_chart('D2', pie)
 
-    st.success("Reconciliation generated successfully")
+    st.success("Enterprise reconciliation file generated successfully.")
 
     st.download_button(
-        "Download Enterprise Excel",
+        "⬇ Download Reconciliation Report",
         output.getvalue(),
-        "GST_Reconciliation_Final.xlsx"
+        "GST_Reconciliation_Modern.xlsx"
     )
