@@ -39,6 +39,11 @@ st.markdown("""
         border-left: 5px solid #38bdf8; border-radius: 8px; 
         margin-bottom: 12px; font-size: 1.05rem; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
     }
+    .web-branding {
+        text-align: center; margin-top: 50px; padding: 20px;
+        border-top: 1px solid rgba(255,255,255,0.1); color: #94a3b8; font-size: 1rem;
+    }
+    .web-branding b { color: #38bdf8; letter-spacing: 1px; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -47,15 +52,6 @@ with st.sidebar:
     st.markdown("### ⚙️ Engine Settings")
     tolerance = st.number_input("Mismatch Tolerance (₹)", min_value=0, value=20, step=1)
     max_rows = st.number_input("Max Rows for Excel Formulas", min_value=1000, value=15000, step=1000)
-    
-    st.markdown("---")
-    st.markdown("""
-    <div style="text-align:center; color:#94a3b8; font-size: 0.9rem;">
-        Developed by <br>
-        <b style="color:#f8fafc;">ABHISHEK JAKKULA</b><br>
-        jakkulaabhishek5@gmail.com
-    </div>
-    """, unsafe_allow_html=True)
 
 # ================= HEADER =================
 st.markdown("<h1>GST Recon Pro</h1>", unsafe_allow_html=True)
@@ -82,6 +78,11 @@ if file_2b and file_pr:
             df_2b.columns = df_2b.columns.str.strip().str.upper()
             df_pr.columns = df_pr.columns.str.strip().str.upper()
 
+            # Ensure extra columns exist gracefully
+            for df in [df_2b, df_pr]:
+                if "MY GSTIN" not in df.columns: df["MY GSTIN"] = ""
+                if "DOCUMENT DATE" not in df.columns: df["DOCUMENT DATE"] = ""
+
             numeric_cols = ["TAXABLE VALUE", "IGST", "CGST", "SGST"]
             for col in numeric_cols:
                 df_2b[col] = pd.to_numeric(df_2b.get(col, 0), errors="coerce").fillna(0)
@@ -99,6 +100,8 @@ if file_2b and file_pr:
             merged["Total Tax (PR)"] = merged[["IGST (PR)", "CGST (PR)", "SGST (PR)"]].sum(axis=1)
             merged["TAXABLE VALUE (2B)"] = merged["TAXABLE VALUE (2B)"].fillna(0)
             merged["TAXABLE VALUE (PR)"] = merged["TAXABLE VALUE (PR)"].fillna(0)
+            
+            merged["Tax Difference(2B-PR)"] = merged["Total Tax (2B)"] - merged["Total Tax (PR)"]
             diff = (merged["TAXABLE VALUE (2B)"] - merged["TAXABLE VALUE (PR)"]).abs()
 
             exact_invoice = merged["DOCUMENT NUMBER (2B)"].astype(str).str.upper() == merged["DOCUMENT NUMBER (PR)"].astype(str).str.upper()
@@ -112,22 +115,53 @@ if file_2b and file_pr:
                 (merged["_merge"] == "right_only")
             ]
             
-            statuses = ["Exact Match", "Fuzzy Match (Invoice Format)", "Exact (Tolerance)", "Value Mismatch", "Missing in Books", "Missing in 2B"]
+            statuses = ["Exact", "Fuzzy Match", "Exact (Tolerance)", "Value Mismatch", "Missing in PR", "Missing in 2B"]
             merged["Match Status"] = np.select(conditions, statuses, default="Unknown")
+
+            # Assign matching reasons based on the requested image format
+            reason_conditions = [
+                (merged["_merge"] == "both") & (diff == 0) & exact_invoice,
+                (merged["_merge"] == "both") & (diff == 0) & ~exact_invoice,
+                (merged["_merge"] == "both") & (diff <= tolerance),
+                (merged["_merge"] == "both") & (diff > tolerance),
+                (merged["_merge"] == "left_only"),
+                (merged["_merge"] == "right_only")
+            ]
+            reasons = ["", "Format Diff", "Within Tolerance", "Taxable Mismatch", "Not in Books", "Not in 2B"]
+            merged["Match Reason"] = np.select(reason_conditions, reasons, default="")
 
             supplier_2b = merged.get("SUPPLIER NAME (2B)", pd.Series(dtype='object'))
             supplier_pr = merged.get("SUPPLIER NAME (PR)", pd.Series(dtype='object'))
             merged["Supplier Name"] = supplier_2b.combine_first(supplier_pr).fillna("Unknown")
 
+            # --- PRECISE COLUMN ORDERING ---
             recon_df = merged[[
-                "Match Status", "Supplier Name", "SUPPLIER GSTIN (2B)", "SUPPLIER GSTIN (PR)", 
-                "DOCUMENT NUMBER (2B)", "DOCUMENT NUMBER (PR)", "TAXABLE VALUE (2B)", "TAXABLE VALUE (PR)", 
-                "Total Tax (2B)", "Total Tax (PR)"
+                "Match Status", "Match Reason", "Supplier Name", 
+                "SUPPLIER GSTIN (2B)", "SUPPLIER GSTIN (PR)", 
+                "MY GSTIN (2B)", "MY GSTIN (PR)",
+                "DOCUMENT NUMBER (2B)", "DOCUMENT NUMBER (PR)", 
+                "DOCUMENT DATE (2B)", "DOCUMENT DATE (PR)",
+                "TAXABLE VALUE (2B)", "TAXABLE VALUE (PR)", 
+                "Tax Difference(2B-PR)",
+                "Total Tax (2B)", "Total Tax (PR)",
+                "IGST (2B)", "IGST (PR)",
+                "CGST (2B)", "CGST (PR)",
+                "SGST (2B)", "SGST (PR)"
             ]].copy()
 
-            recon_df.columns = ["Match Status", "Supplier Name", "Supplier GSTIN (2B)", "Supplier GSTIN (Books)", 
-                                "Invoice No (2B)", "Invoice No (Books)", "Taxable (2B)", "Taxable (Books)", 
-                                "Total Tax (2B)", "Total Tax (Books)"]
+            recon_df.columns = [
+                "Match Status", "Match Reason", "Supplier Name", 
+                "Supplier GSTIN (2B)", "Supplier GSTIN (PR)", 
+                "My GSTIN (2B)", "My GSTIN (PR)",
+                "Document Number (2B)", "Document Number (PR)", 
+                "Document Date (2B)", "Document Date (PR)",
+                "Taxable Value (2B)", "Taxable Value (PR)", 
+                "Tax Difference(2B-PR)",
+                "Total Tax (2B)", "Total Tax (PR)",
+                "IGST (2B)", "IGST (PR)",
+                "CGST (2B)", "CGST (PR)",
+                "SGST (2B)", "SGST (PR)"
+            ]
 
             counts = recon_df["Match Status"].value_counts()
             
@@ -135,128 +169,100 @@ if file_2b and file_pr:
             st.markdown("### 📊 Live Summary")
             m1, m2, m3, m4 = st.columns(4)
             m1.metric("Total Records", len(recon_df))
-            m2.metric("Total Matches", counts.get("Exact Match", 0) + counts.get("Fuzzy Match (Invoice Format)", 0))
-            m3.metric("Missing in Books", counts.get("Missing in Books", 0))
+            m2.metric("Total Matches", counts.get("Exact", 0) + counts.get("Fuzzy Match", 0) + counts.get("Exact (Tolerance)", 0))
+            m3.metric("Missing in Books", counts.get("Missing in PR", 0))
             m4.metric("Missing in 2B", counts.get("Missing in 2B", 0))
 
-            # --- 🤖 SMART AI INSIGHTS ---
-            st.markdown("### 🧠 Automated Financial Insights")
-            
-            total_records = len(recon_df)
-            miss_pr_pct = (counts.get("Missing in Books", 0) / total_records) * 100 if total_records else 0
-            
-            # ITC Calculations
-            missed_itc = recon_df[recon_df["Match Status"] == "Missing in Books"]["Total Tax (2B)"].sum()
-            risk_itc = recon_df[recon_df["Match Status"] == "Missing in 2B"]["Total Tax (Books)"].sum()
-
-            insights = []
-            
-            # 1. Unclaimed ITC (Missing in Books)
-            if miss_pr_pct > 10:
-                insights.append(f"🚨 **High Action Required:** **{miss_pr_pct:.1f}%** of records are missing in your Purchase Register. You have **₹{missed_itc:,.2f}** in unclaimed Input Tax Credit (ITC). Update your books immediately.")
-            elif missed_itc > 0:
-                insights.append(f"💡 **Cash Flow Opportunity:** You have **₹{missed_itc:,.2f}** of ITC sitting in GSTR-2B that isn't recorded in your books. Claim this to optimize cash flow.")
-                
-            # 2. Compliance Risk (Missing in 2B)
-            if risk_itc > 0:
-                insights.append(f"⚠️ **Compliance Risk:** **₹{risk_itc:,.2f}** of tax is claimed in your books but missing in GSTR-2B. Follow up with these suppliers to upload their invoices to avoid departmental notices.")
-                
-            # 3. Top Defaulter Analysis
-            bad_statuses = ["Missing in Books", "Missing in 2B", "Value Mismatch"]
-            problem_records = recon_df[recon_df["Match Status"].isin(bad_statuses)]
-            if not problem_records.empty:
-                # Group by supplier and sum the absolute differences in tax
-                problem_records["Tax Variance"] = (problem_records["Total Tax (2B)"] - problem_records["Total Tax (Books)"]).abs()
-                top_supplier = problem_records.groupby("Supplier Name")["Tax Variance"].sum().sort_values(ascending=False).head(1)
-                
-                if not top_supplier.empty and top_supplier.iloc[0] > 0:
-                    insights.append(f"🏢 **Supplier to Contact:** **{top_supplier.index[0]}** is causing the highest variance (₹{top_supplier.iloc[0]:,.2f} mismatch). Focus reconciliation efforts here first.")
-
-            if not insights:
-                insights.append("✅ **Excellent Health:** Your books are exceptionally well-reconciled with GSTR-2B. No major financial risks detected.")
-
-            # Render Insights
-            for insight in insights:
-                st.markdown(f"<div class='insight-box'>{insight}</div>", unsafe_allow_html=True)
-
-            st.markdown("<br>", unsafe_allow_html=True)
-
             # --- DATA PREVIEW ---
-            st.markdown("#### 🔎 Filter & Preview Data")
-            selected_status = st.multiselect("Filter by Match Status:", options=statuses, default=statuses)
-            filtered_df = recon_df[recon_df["Match Status"].isin(selected_status)]
-            st.dataframe(filtered_df.head(100), use_container_width=True)
+            st.markdown("#### 🔎 Preview Data")
+            st.dataframe(recon_df.head(100), use_container_width=True)
 
-            # --- EXCEL EXPORT WITH BRANDED DASHBOARD ---
+            # --- EXCEL EXPORT WITH EXACT FORMATTING ---
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
                 workbook = writer.book
                 
+                # Setup Formats
                 brand_format = workbook.add_format({"bold": True, "font_size": 18, "bg_color": "#0f172a", "font_color": "#38bdf8", "align": "center", "valign": "vcenter"})
                 dev_format = workbook.add_format({"italic": True, "font_size": 10, "bg_color": "#0f172a", "font_color": "#94a3b8", "align": "center"})
-                header_format = workbook.add_format({"bold": True, "bg_color": "#1e293b", "font_color": "white", "border": 1})
                 
-                recon_df.to_excel(writer, sheet_name="Reconciliation", startrow=2, index=False, header=False)
-                sheet_recon = writer.sheets["Reconciliation"]
-                for col_num, col_name in enumerate(recon_df.columns):
-                    sheet_recon.write(1, col_num, col_name, header_format)
-                sheet_recon.set_column('A:B', 25)
-                sheet_recon.set_column('C:E', 20)
-                sheet_recon.set_column('F:J', 15)
+                # Color coded header formats
+                fmt_blue = workbook.add_format({"bold": True, "bg_color": "#cce5ff", "border": 1, "text_wrap": True})
+                fmt_grey = workbook.add_format({"bold": True, "bg_color": "#d9d9d9", "border": 1, "text_wrap": True})
+                fmt_red = workbook.add_format({"bold": True, "bg_color": "#e6b8b7", "border": 1, "text_wrap": True})
+                fmt_orange = workbook.add_format({"bold": True, "bg_color": "#fce4d6", "border": 1, "text_wrap": True})
+                fmt_tax_diff = workbook.add_format({"bold": True, "bg_color": "#a4c2f4", "border": 1, "text_wrap": True})
+                
+                # Map columns to formats based on name
+                def get_col_format(col_name):
+                    if "Status" in col_name or "Reason" in col_name: return fmt_blue
+                    if "Supplier Name" in col_name: return fmt_grey
+                    if "(2B)" in col_name: return fmt_red
+                    if "(PR)" in col_name: return fmt_orange
+                    if "Difference" in col_name: return fmt_tax_diff
+                    return fmt_grey
 
-                df_2b.drop(columns=["NORM_DOC", "KEY"], errors="ignore").to_excel(writer, sheet_name="2B Raw", index=False)
-                df_pr.drop(columns=["NORM_DOC", "KEY"], errors="ignore").to_excel(writer, sheet_name="Books Raw", index=False)
-
+                # 1. Create Dashboard FIRST so it opens exactly on it
                 dash = workbook.add_worksheet("Dashboard")
                 dash.hide_gridlines(2)
                 
                 dash.merge_range("A1:I2", "GST RECON PRO - EXECUTIVE SUMMARY", brand_format)
                 dash.merge_range("A3:I3", "Developed by ABHISHEK JAKKULA | jakkulaabhishek5@gmail.com", dev_format)
 
-                dash.write_row("B5", ["Match Status", "Record Count", "Taxable Impact (2B)"], header_format)
+                dash.write_row("B5", ["Match Status", "Record Count"], workbook.add_format({"bold": True, "bg_color": "#1e293b", "font_color": "white", "border": 1}))
                 dash.set_column('B:B', 25)
-                dash.set_column('C:D', 18)
+                dash.set_column('C:C', 18)
 
                 for i, status in enumerate(statuses):
                     row = 5 + i
                     dash.write(row, 1, status)
-                    dash.write_formula(row, 2, f'=COUNTIF(Reconciliation!$A$3:$A${max_rows}, "{status}")')
-                    dash.write_formula(row, 3, f'=SUMIF(Reconciliation!$A$3:$A${max_rows}, "{status}", Reconciliation!$G$3:$G${max_rows})')
+                    dash.write_formula(row, 2, f'=COUNTIF(Reconciliation!$A$2:$A${max_rows}, "{status}")')
 
                 pie_chart = workbook.add_chart({'type': 'doughnut'})
                 pie_chart.add_series({
-                    'name': 'Match Status Distribution',
+                    'name': 'Status Distribution',
                     'categories': f'=Dashboard!$B$6:$B$11',
                     'values': f'=Dashboard!$C$6:$C$11',
-                    'data_labels': {'percentage': True, 'show_leader_lines': True}
+                    'data_labels': {'percentage': True}
                 })
-                pie_chart.set_title({'name': 'Record Volume by Status'})
-                pie_chart.set_style(10)
-                dash.insert_chart('F5', pie_chart)
+                dash.insert_chart('E5', pie_chart)
 
-                bar_chart = workbook.add_chart({'type': 'column'})
-                bar_chart.add_series({
-                    'name': 'Taxable Value Impact',
-                    'categories': f'=Dashboard!$B$6:$B$11',
-                    'values': f'=Dashboard!$D$6:$D$11',
-                    'data_labels': {'value': True}
-                })
-                bar_chart.set_title({'name': 'Taxable Value Impact (₹)'})
-                bar_chart.set_legend({'none': True})
-                bar_chart.set_style(11)
-                dash.insert_chart('A14', bar_chart, {'x_scale': 1.5, 'y_scale': 1.2})
+                # 2. Create Reconciliation Sheet
+                sheet_recon = workbook.add_worksheet("Reconciliation")
+                recon_df.to_excel(writer, sheet_name="Reconciliation", startrow=1, index=False, header=False)
+                
+                # Apply custom headers
+                for col_num, col_name in enumerate(recon_df.columns):
+                    sheet_recon.write(0, col_num, col_name, get_col_format(col_name))
+                
+                sheet_recon.set_column('A:B', 15)
+                sheet_recon.set_column('C:C', 35)
+                sheet_recon.set_column('D:K', 18)
+                sheet_recon.set_column('L:V', 12)
 
-            st.success("✅ Smart Reconciliation, Insights & Excel Dashboard generated successfully!")
+                # 3. Create Raw Data Sheets
+                df_2b.drop(columns=["NORM_DOC", "KEY"], errors="ignore").to_excel(writer, sheet_name="2B Raw", index=False)
+                df_pr.drop(columns=["NORM_DOC", "KEY"], errors="ignore").to_excel(writer, sheet_name="Books Raw", index=False)
+
+            st.success("✅ Reconciliation generated! The Dashboard will be the first sheet.")
 
             col_btn, empty2 = st.columns([1, 2])
             with col_btn:
                 st.download_button(
-                    "⚡ Download Ultimate Excel Report",
+                    "⚡ Download Branded Excel Report",
                     output.getvalue(),
-                    f"GST_Recon_Pro_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                    f"GST_Recon_Report_{datetime.now().strftime('%Y%m%d')}.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     use_container_width=True
                 )
 
     except Exception as e:
         st.error(f"⚠️ Engine Error: {e}")
+
+# ================= PROMINENT WEB BRANDING =================
+st.markdown("""
+<div class="web-branding">
+    Developed by <b>ABHISHEK JAKKULA</b><br>
+    jakkulaabhishek5@gmail.com
+</div>
+""", unsafe_allow_html=True)
