@@ -7,7 +7,6 @@ import xlsxwriter
 TOLERANCE = 20
 
 st.set_page_config(page_title="GST 2B vs Books", layout="wide")
-
 st.title("GST 2B vs Purchase Reconciliation Tool")
 
 # ---------------- TEMPLATE ----------------
@@ -70,7 +69,6 @@ if file_2b and file_pr:
 
     for _, row in merged.iterrows():
 
-        status = ""
         taxable_2b = row.get("TAXABLE VALUE (2B)", 0)
         taxable_pr = row.get("TAXABLE VALUE (PR)", 0)
 
@@ -82,7 +80,7 @@ if file_2b and file_pr:
             if diff == 0:
                 status = "Exact"
             elif diff <= TOLERANCE:
-                status = "Exact (Within ₹20)"
+                status = "Exact (Within 20)"
             else:
                 status = "Value Mismatch"
         elif row["_merge"] == "left_only":
@@ -99,8 +97,8 @@ if file_2b and file_pr:
             "My GSTIN (PR)": row.get("MY GSTIN (PR)", ""),
             "Document Number (2B)": row.get("DOCUMENT NUMBER (2B)", ""),
             "Document Number (PR)": row.get("DOCUMENT NUMBER (PR)", ""),
-            "Document Date (2B)": row.get("DOCUMENT DATE (2B)", ""),
-            "Document Date (PR)": row.get("DOCUMENT DATE (PR)", ""),
+            "Document Date (2B)": str(row.get("DOCUMENT DATE (2B)", "")),
+            "Document Date (PR)": str(row.get("DOCUMENT DATE (PR)", "")),
             "Taxable Value (2B)": taxable_2b,
             "Taxable Value (PR)": taxable_pr,
             "Tax Difference (2B-PR)": taxable_2b - taxable_pr,
@@ -114,15 +112,16 @@ if file_2b and file_pr:
             "SGST (PR)": row.get("SGST (PR)",0),
         })
 
-    final_df = pd.DataFrame(output_rows)
+    final_df = pd.DataFrame(output_rows).fillna("")
 
     st.success("Reconciliation Completed")
     st.dataframe(final_df)
 
-    # ---------------- EXCEL EXPORT ----------------
+    # ---------------- EXCEL GENERATION ----------------
     output = io.BytesIO()
     workbook = xlsxwriter.Workbook(output)
     worksheet = workbook.add_worksheet("Reconciliation")
+    dashboard = workbook.add_worksheet("Dashboard")
 
     header_format = workbook.add_format({
         'bold': True,
@@ -130,12 +129,31 @@ if file_2b and file_pr:
         'border':1
     })
 
+    # Write data
     for col_num, value in enumerate(final_df.columns.values):
         worksheet.write(0, col_num, value, header_format)
+        worksheet.set_column(col_num, col_num, 18)
 
     for row_num, row_data in enumerate(final_df.values):
         for col_num, cell_data in enumerate(row_data):
-            worksheet.write(row_num+1, col_num, cell_data)
+            worksheet.write(row_num+1, col_num, str(cell_data))
+
+    # ---------------- DASHBOARD ----------------
+    status_counts = final_df["Match Status"].value_counts().reset_index()
+    status_counts.columns = ["Status", "Count"]
+
+    dashboard.write_row("A1", ["Status","Count"], header_format)
+    for i, row in status_counts.iterrows():
+        dashboard.write_row(i+1, 0, row.values)
+
+    chart = workbook.add_chart({'type': 'pie'})
+    chart.add_series({
+        'categories': f"=Dashboard!$A$2:$A${len(status_counts)+1}",
+        'values':     f"=Dashboard!$B$2:$B${len(status_counts)+1}",
+        'data_labels': {'percentage': True}
+    })
+    chart.set_title({'name': 'Match Status Distribution'})
+    dashboard.insert_chart('D2', chart)
 
     workbook.close()
 
