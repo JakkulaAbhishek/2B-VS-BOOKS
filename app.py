@@ -107,6 +107,7 @@ if file_2b and file_pr:
 
             exact_invoice = merged["DOCUMENT NUMBER (2B)"].astype(str).str.upper() == merged["DOCUMENT NUMBER (PR)"].astype(str).str.upper()
 
+            # Assign Status
             conditions = [
                 (merged["_merge"] == "both") & (diff == 0) & exact_invoice,
                 (merged["_merge"] == "both") & (diff == 0) & ~exact_invoice,
@@ -119,22 +120,22 @@ if file_2b and file_pr:
             statuses = ["Exact", "Fuzzy Match", "Exact (Tolerance)", "Value Mismatch", "Missing in PR", "Missing in 2B"]
             merged["Match Status"] = np.select(conditions, statuses, default="Unknown")
 
-            reason_conditions = [
-                (merged["_merge"] == "both") & (diff == 0) & exact_invoice,
-                (merged["_merge"] == "both") & (diff == 0) & ~exact_invoice,
-                (merged["_merge"] == "both") & (diff <= tolerance),
-                (merged["_merge"] == "both") & (diff > tolerance),
-                (merged["_merge"] == "left_only"),
-                (merged["_merge"] == "right_only")
+            # Assign Detailed Matching Reasons
+            reasons = [
+                "Exact match on all fields", 
+                "Matched ignoring special chars", 
+                f"Matched within ₹{tolerance} tolerance", 
+                "Taxable value mismatch", 
+                "Present only in GSTR-2B", 
+                "Present only in Books"
             ]
-            reasons = ["", "Format Diff", "Within Tolerance", "Taxable Mismatch", "Not in Books", "Not in 2B"]
-            merged["Match Reason"] = np.select(reason_conditions, reasons, default="")
+            merged["Match Reason"] = np.select(conditions, reasons, default="Unknown")
 
             supplier_2b = merged.get("SUPPLIER NAME (2B)", pd.Series(dtype='object'))
             supplier_pr = merged.get("SUPPLIER NAME (PR)", pd.Series(dtype='object'))
             merged["Supplier Name"] = supplier_2b.combine_first(supplier_pr).fillna("Unknown")
 
-            # --- PRECISE COLUMN ORDERING (As per image) ---
+            # --- PRECISE COLUMN ORDERING ---
             recon_df = merged[[
                 "Match Status", "Match Reason", "Supplier Name", 
                 "SUPPLIER GSTIN (2B)", "SUPPLIER GSTIN (PR)", 
@@ -235,7 +236,7 @@ if file_2b and file_pr:
             filtered_df = recon_df[recon_df["Match Status"].isin(selected_status)]
             st.dataframe(filtered_df.head(100), use_container_width=True)
 
-            # --- 5. EXCEL EXPORT (DASHBOARD FIRST, EXACT COLORS) ---
+            # --- 5. EXCEL EXPORT ---
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
                 workbook = writer.book
@@ -250,6 +251,7 @@ if file_2b and file_pr:
                 fmt_red = workbook.add_format({"bold": True, "bg_color": "#e6b8b7", "border": 1, "text_wrap": True, "align": "center"})
                 fmt_orange = workbook.add_format({"bold": True, "bg_color": "#fce4d6", "border": 1, "text_wrap": True, "align": "center"})
                 fmt_tax_diff = workbook.add_format({"bold": True, "bg_color": "#a4c2f4", "border": 1, "text_wrap": True, "align": "center"})
+                fmt_subtotal = workbook.add_format({"bold": True, "bg_color": "#f2f2f2", "border": 1, "num_format": "#,##0.00"})
                 
                 def get_col_format(col_name):
                     if "Status" in col_name or "Reason" in col_name: return fmt_blue
@@ -273,8 +275,8 @@ if file_2b and file_pr:
                 for i, status in enumerate(statuses):
                     row = 5 + i
                     dash.write(row, 1, status)
-                    dash.write_formula(row, 2, f'=COUNTIF(Reconciliation!$A$2:$A${max_rows}, "{status}")')
-                    dash.write_formula(row, 3, f'=SUMIF(Reconciliation!$A$2:$A${max_rows}, "{status}", Reconciliation!$L$2:$L${max_rows})')
+                    dash.write_formula(row, 2, f'=COUNTIF(Reconciliation!$A$3:$A${max_rows}, "{status}")')
+                    dash.write_formula(row, 3, f'=SUMIF(Reconciliation!$A$3:$A${max_rows}, "{status}", Reconciliation!$L$3:$L${max_rows})')
 
                 pie_chart = workbook.add_chart({'type': 'doughnut'})
                 pie_chart.add_series({
@@ -294,30 +296,44 @@ if file_2b and file_pr:
                 })
                 dash.insert_chart('A14', bar_chart, {'x_scale': 1.5, 'y_scale': 1.2})
 
-                # B. Create Reconciliation Sheet
+                # B. Create Reconciliation Sheet (with Subtotals)
                 sheet_recon = workbook.add_worksheet("Reconciliation")
-                recon_df.to_excel(writer, sheet_name="Reconciliation", startrow=1, index=False, header=False)
                 
+                # Write data starting at row 2 (Excel Row 3) to leave space for Subtotals and Headers
+                recon_df.to_excel(writer, sheet_name="Reconciliation", startrow=2, index=False, header=False)
+                
+                # Write Subtotals (Row 0 / Excel Row 1) and Headers (Row 1 / Excel Row 2)
                 for col_num, col_name in enumerate(recon_df.columns):
-                    sheet_recon.write(0, col_num, col_name, get_col_format(col_name))
-                
-                sheet_recon.set_column('A:B', 15)
+                    # Write Header
+                    sheet_recon.write(1, col_num, col_name, get_col_format(col_name))
+                    
+                    # Write Subtotals for numeric columns
+                    if pd.api.types.is_numeric_dtype(recon_df[col_name]):
+                        col_letter = chr(65 + col_num)  # Works dynamically up to column Z
+                        formula = f"=SUBTOTAL(9,{col_letter}3:{col_letter}{max_rows})"
+                        sheet_recon.write_formula(0, col_num, formula, fmt_subtotal)
+
+                # Set Column Widths
+                sheet_recon.set_column('A:B', 22)
                 sheet_recon.set_column('C:C', 35)
                 sheet_recon.set_column('D:K', 18)
-                sheet_recon.set_column('L:V', 12)
+                sheet_recon.set_column('L:V', 14)
+
+                # Add auto-filter for easy sorting
+                sheet_recon.autofilter(1, 0, max_rows, len(recon_df.columns) - 1)
 
                 # C. Create Raw Data Sheets
                 df_2b.drop(columns=["NORM_DOC", "KEY"], errors="ignore").to_excel(writer, sheet_name="2B Raw", index=False)
                 df_pr.drop(columns=["NORM_DOC", "KEY"], errors="ignore").to_excel(writer, sheet_name="Books Raw", index=False)
 
-            st.success("✅ Reconciliation generated perfectly!")
+            st.success("✅ Ultimate Reconciliation Dashboard generated perfectly!")
 
             col_btn, empty2 = st.columns([1, 2])
             with col_btn:
                 st.download_button(
-                    "⚡ Download Branded Excel Report",
+                    "⚡ Download Final Excel Report",
                     output.getvalue(),
-                    f"GST_Recon_Report_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                    f"GST_Recon_Ultimate_{datetime.now().strftime('%Y%m%d')}.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     use_container_width=True
                 )
