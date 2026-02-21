@@ -164,6 +164,10 @@ if file_2b and file_pr:
                 "SGST (2B)", "SGST (PR)"
             ]
 
+            # --- CALCULATE TOP 10 PARTIES ---
+            top10_2b = recon_df.groupby("Supplier Name")[["Taxable Value (2B)", "Total Tax (2B)"]].sum().nlargest(10, "Taxable Value (2B)").reset_index()
+            top10_pr = recon_df.groupby("Supplier Name")[["Taxable Value (PR)", "Total Tax (PR)"]].sum().nlargest(10, "Taxable Value (PR)").reset_index()
+
             counts = recon_df["Match Status"].value_counts()
             
             # --- 1. WEB DASHBOARD: METRICS ---
@@ -206,29 +210,33 @@ if file_2b and file_pr:
             for insight in insights:
                 st.markdown(f"<div class='insight-box'>{insight}</div>", unsafe_allow_html=True)
 
-            # --- 3. PLOTLY WEB CHART ---
+            # --- 3. PLOTLY WEB CHARTS (STATUS & TOP 10) ---
             st.markdown("<br>", unsafe_allow_html=True)
+            
+            # Status Bar Chart
             chart_data = counts.reset_index()
             chart_data.columns = ["Match Status", "Count"]
-            
             color_map = {
                 "Exact": "#10b981", "Fuzzy Match": "#38bdf8", "Exact (Tolerance)": "#f59e0b",
                 "Value Mismatch": "#ef4444", "Missing in PR": "#f97316", "Missing in 2B": "#8b5cf6"
             }
-
-            fig = px.bar(
-                chart_data, x="Count", y="Match Status", color="Match Status",
-                color_discrete_map=color_map, text="Count", orientation='h', title="Status Distribution"
-            )
-            fig.update_layout(
-                plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
-                font=dict(color="#f8fafc", family="Poppins"), showlegend=False,
-                margin=dict(l=20, r=20, t=40, b=20),
-                xaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.1)", title=""),
-                yaxis=dict(title="", categoryorder="total ascending")
-            )
-            fig.update_traces(textposition='outside')
+            fig = px.bar(chart_data, x="Count", y="Match Status", color="Match Status", color_discrete_map=color_map, text="Count", orientation='h', title="Status Distribution")
+            fig.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", font=dict(color="#f8fafc", family="Poppins"), showlegend=False, yaxis=dict(title="", categoryorder="total ascending"))
             st.plotly_chart(fig, use_container_width=True)
+
+            # Top 10 Pie Charts
+            st.markdown("### 🏆 Top 10 Parties (by Taxable Value)")
+            c_pie1, c_pie2 = st.columns(2)
+            with c_pie1:
+                fig_2b = px.pie(top10_2b, names="Supplier Name", values="Taxable Value (2B)", title="Top 10 Suppliers in 2B", hole=0.4)
+                fig_2b.update_layout(paper_bgcolor="rgba(0,0,0,0)", font=dict(color="#f8fafc", family="Poppins"), showlegend=False)
+                fig_2b.update_traces(textposition='inside', textinfo='percent+label')
+                st.plotly_chart(fig_2b, use_container_width=True)
+            with c_pie2:
+                fig_pr = px.pie(top10_pr, names="Supplier Name", values="Taxable Value (PR)", title="Top 10 Suppliers in Books", hole=0.4)
+                fig_pr.update_layout(paper_bgcolor="rgba(0,0,0,0)", font=dict(color="#f8fafc", family="Poppins"), showlegend=False)
+                fig_pr.update_traces(textposition='inside', textinfo='percent+label')
+                st.plotly_chart(fig_pr, use_container_width=True)
 
             # --- 4. DATA PREVIEW ---
             st.markdown("#### 🔎 Filter & Preview Data")
@@ -245,30 +253,22 @@ if file_2b and file_pr:
                 brand_format = workbook.add_format({"bold": True, "font_size": 18, "bg_color": "#0f172a", "font_color": "#38bdf8", "align": "center", "valign": "vcenter"})
                 dev_format = workbook.add_format({"italic": True, "font_size": 10, "bg_color": "#0f172a", "font_color": "#94a3b8", "align": "center"})
                 
-                # Image-matched Color formats
-                fmt_blue = workbook.add_format({"bold": True, "bg_color": "#cce5ff", "border": 1, "text_wrap": True, "align": "center"})
-                fmt_grey = workbook.add_format({"bold": True, "bg_color": "#d9d9d9", "border": 1, "text_wrap": True, "align": "center"})
-                fmt_red = workbook.add_format({"bold": True, "bg_color": "#e6b8b7", "border": 1, "text_wrap": True, "align": "center"})
-                fmt_orange = workbook.add_format({"bold": True, "bg_color": "#fce4d6", "border": 1, "text_wrap": True, "align": "center"})
-                fmt_tax_diff = workbook.add_format({"bold": True, "bg_color": "#a4c2f4", "border": 1, "text_wrap": True, "align": "center"})
+                # New Format: Blue background with White Characters for ALL headers
+                fmt_blue_white_header = workbook.add_format({
+                    "bold": True, "bg_color": "#1a73e8", "font_color": "white", 
+                    "border": 1, "text_wrap": True, "align": "center", "valign": "vcenter"
+                })
                 fmt_subtotal = workbook.add_format({"bold": True, "bg_color": "#f2f2f2", "border": 1, "num_format": "#,##0.00"})
                 
-                def get_col_format(col_name):
-                    if "Status" in col_name or "Reason" in col_name: return fmt_blue
-                    if "Supplier Name" in col_name: return fmt_grey
-                    if "(2B)" in col_name: return fmt_red
-                    if "(PR)" in col_name: return fmt_orange
-                    if "Difference" in col_name: return fmt_tax_diff
-                    return fmt_grey
-
                 # A. Create Dashboard FIRST
                 dash = workbook.add_worksheet("Dashboard")
                 dash.hide_gridlines(2)
                 
-                dash.merge_range("A1:I2", "GST RECON PRO - EXECUTIVE SUMMARY", brand_format)
-                dash.merge_range("A3:I3", "Developed by ABHISHEK JAKKULA | jakkulaabhishek5@gmail.com", dev_format)
+                dash.merge_range("A1:M2", "GST RECON PRO - EXECUTIVE SUMMARY", brand_format)
+                dash.merge_range("A3:M3", "Developed by ABHISHEK JAKKULA | jakkulaabhishek5@gmail.com", dev_format)
 
-                dash.write_row("B5", ["Match Status", "Record Count", "Taxable Impact (2B)"], workbook.add_format({"bold": True, "bg_color": "#1e293b", "font_color": "white", "border": 1}))
+                # Dashboard: Summary Table
+                dash.write_row("B5", ["Match Status", "Record Count", "Taxable Impact (2B)"], fmt_blue_white_header)
                 dash.set_column('B:B', 25)
                 dash.set_column('C:D', 18)
 
@@ -278,6 +278,22 @@ if file_2b and file_pr:
                     dash.write_formula(row, 2, f'=COUNTIF(Reconciliation!$A$3:$A${max_rows}, "{status}")')
                     dash.write_formula(row, 3, f'=SUMIF(Reconciliation!$A$3:$A${max_rows}, "{status}", Reconciliation!$L$3:$L${max_rows})')
 
+                # Dashboard: Top 10 Tables
+                dash.write("H5", "Top 10 Suppliers (2B)", fmt_blue_white_header)
+                dash.write_row("H6", ["Supplier Name", "Taxable Value (2B)", "Total Tax (2B)"], fmt_blue_white_header)
+                for r_idx, row in top10_2b.iterrows():
+                    dash.write_row(r_idx + 6, 7, [row["Supplier Name"], row["Taxable Value (2B)"], row["Total Tax (2B)"]])
+                dash.set_column('H:H', 25)
+                dash.set_column('I:J', 15)
+
+                dash.write("L5", "Top 10 Suppliers (Books)", fmt_blue_white_header)
+                dash.write_row("L6", ["Supplier Name", "Taxable Value (PR)", "Total Tax (PR)"], fmt_blue_white_header)
+                for r_idx, row in top10_pr.iterrows():
+                    dash.write_row(r_idx + 6, 11, [row["Supplier Name"], row["Taxable Value (PR)"], row["Total Tax (PR)"]])
+                dash.set_column('L:L', 25)
+                dash.set_column('M:N', 15)
+
+                # Dashboard: Charts
                 pie_chart = workbook.add_chart({'type': 'doughnut'})
                 pie_chart.add_series({
                     'name': 'Status Distribution',
@@ -285,16 +301,27 @@ if file_2b and file_pr:
                     'values': f'=Dashboard!$C$6:$C$11',
                     'data_labels': {'percentage': True}
                 })
-                dash.insert_chart('F5', pie_chart)
+                dash.insert_chart('B13', pie_chart)
 
-                bar_chart = workbook.add_chart({'type': 'column'})
-                bar_chart.add_series({
-                    'name': 'Taxable Value Impact',
-                    'categories': f'=Dashboard!$B$6:$B$11',
-                    'values': f'=Dashboard!$D$6:$D$11',
-                    'data_labels': {'value': True}
+                pie_2b = workbook.add_chart({'type': 'pie'})
+                pie_2b.add_series({
+                    'name': 'Top 10 2B',
+                    'categories': f'=Dashboard!$H$7:$H${6 + len(top10_2b)}',
+                    'values': f'=Dashboard!$I$7:$I${6 + len(top10_2b)}',
                 })
-                dash.insert_chart('A14', bar_chart, {'x_scale': 1.5, 'y_scale': 1.2})
+                pie_2b.set_title({'name': 'Top 10 Suppliers (2B)'})
+                pie_2b.set_legend({'position': 'bottom'})
+                dash.insert_chart('H18', pie_2b)
+
+                pie_pr = workbook.add_chart({'type': 'pie'})
+                pie_pr.add_series({
+                    'name': 'Top 10 Books',
+                    'categories': f'=Dashboard!$L$7:$L${6 + len(top10_pr)}',
+                    'values': f'=Dashboard!$M$7:$M${6 + len(top10_pr)}',
+                })
+                pie_pr.set_title({'name': 'Top 10 Suppliers (Books)'})
+                pie_pr.set_legend({'position': 'bottom'})
+                dash.insert_chart('L18', pie_pr)
 
                 # B. Create Reconciliation Sheet (with Subtotals)
                 sheet_recon = workbook.add_worksheet("Reconciliation")
@@ -304,12 +331,12 @@ if file_2b and file_pr:
                 
                 # Write Subtotals (Row 0 / Excel Row 1) and Headers (Row 1 / Excel Row 2)
                 for col_num, col_name in enumerate(recon_df.columns):
-                    # Write Header
-                    sheet_recon.write(1, col_num, col_name, get_col_format(col_name))
+                    # Write Header (All Blue & White)
+                    sheet_recon.write(1, col_num, col_name, fmt_blue_white_header)
                     
                     # Write Subtotals for numeric columns
                     if pd.api.types.is_numeric_dtype(recon_df[col_name]):
-                        col_letter = chr(65 + col_num)  # Works dynamically up to column Z
+                        col_letter = chr(65 + col_num) 
                         formula = f"=SUBTOTAL(9,{col_letter}3:{col_letter}{max_rows})"
                         sheet_recon.write_formula(0, col_num, formula, fmt_subtotal)
 
@@ -319,7 +346,7 @@ if file_2b and file_pr:
                 sheet_recon.set_column('D:K', 18)
                 sheet_recon.set_column('L:V', 14)
 
-                # Add auto-filter for easy sorting
+                # Add auto-filter
                 sheet_recon.autofilter(1, 0, max_rows, len(recon_df.columns) - 1)
 
                 # C. Create Raw Data Sheets
