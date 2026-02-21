@@ -3,15 +3,28 @@ import pandas as pd
 import numpy as np
 import io
 
+# ================= CONFIG =================
 TOLERANCE = 20
 MAX_ROWS = 15000
 
-st.set_page_config(page_title="GST Enterprise Formula Dashboard", layout="wide")
-st.title("🚀 GST 2B vs Books – Formula Driven Reconciliation")
+st.set_page_config(page_title="GST Reconciliation", layout="wide")
+
+# ================= GOOGLE STYLE UI =================
+st.markdown("""
+<style>
+body {background-color:#f5f5f5;}
+h1 {color:#1a73e8; font-weight:600;}
+div[data-testid="stFileUploader"] {background:white; padding:15px; border-radius:10px;}
+.stButton>button {background:#1a73e8;color:white;border-radius:8px;height:40px;}
+</style>
+""", unsafe_allow_html=True)
+
+st.title("GST 2B vs Books Reconciliation")
 
 file_2b = st.file_uploader("Upload GSTR-2B Excel", type=["xlsx"])
 file_pr = st.file_uploader("Upload Purchase Register Excel", type=["xlsx"])
 
+# ================= PROCESS =================
 if file_2b and file_pr:
 
     df_2b = pd.read_excel(file_2b)
@@ -20,19 +33,25 @@ if file_2b and file_pr:
     df_2b.columns = df_2b.columns.str.strip().str.upper()
     df_pr.columns = df_pr.columns.str.strip().str.upper()
 
-    num_cols = ["TAXABLE VALUE","IGST","CGST","SGST"]
+    numeric_cols = ["TAXABLE VALUE","IGST","CGST","SGST"]
 
-    for col in num_cols:
+    for col in numeric_cols:
         df_2b[col] = pd.to_numeric(df_2b.get(col,0), errors="coerce").fillna(0)
         df_pr[col] = pd.to_numeric(df_pr.get(col,0), errors="coerce").fillna(0)
 
     df_2b["KEY"] = df_2b["SUPPLIER GSTIN"].astype(str)+"|"+df_2b["DOCUMENT NUMBER"].astype(str)
     df_pr["KEY"] = df_pr["SUPPLIER GSTIN"].astype(str)+"|"+df_pr["DOCUMENT NUMBER"].astype(str)
 
-    merged = pd.merge(df_2b, df_pr, on="KEY", how="outer",
-                      suffixes=(" (2B)", " (PR)"), indicator=True)
+    merged = pd.merge(
+        df_2b,
+        df_pr,
+        on="KEY",
+        how="outer",
+        suffixes=(" (2B)", " (PR)"),
+        indicator=True
+    )
 
-    rows = []
+    records = []
 
     for _, r in merged.iterrows():
 
@@ -72,7 +91,7 @@ if file_2b and file_pr:
         if pd.isna(supplier):
             supplier = r.get("SUPPLIER NAME (PR)","")
 
-        rows.append({
+        records.append({
             "Match Status":status,
             "Match Reason":reason,
             "Supplier Name":supplier,
@@ -92,27 +111,34 @@ if file_2b and file_pr:
             "SGST (PR)":sgst_pr,
         })
 
-    recon_df = pd.DataFrame(rows)
+    recon_df = pd.DataFrame(records)
 
+    # ================= EXCEL GENERATION =================
     output = io.BytesIO()
 
     with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
 
         workbook = writer.book
 
-        header = workbook.add_format({
+        header_format = workbook.add_format({
             "bold":True,
-            "bg_color":"#1f4e79",
-            "font_color":"white"
+            "bg_color":"#1a73e8",
+            "font_color":"white",
+            "border":1
         })
 
-        # ---------------- RECON SHEET ----------------
-        recon_df.to_excel(writer, sheet_name="Reconciliation",
-                          startrow=2, index=False)
+        # ---------- RECON SHEET ----------
+        recon_df.to_excel(
+            writer,
+            sheet_name="Reconciliation",
+            startrow=2,
+            index=False,
+            header=False
+        )
 
         sheet = writer.sheets["Reconciliation"]
 
-        # Row 1 – SUBTOTAL FORMULA (15000 rows coverage)
+        # Row 1 = Subtotal formulas
         for col in recon_df.select_dtypes(include=np.number).columns:
             idx = recon_df.columns.get_loc(col)
             col_letter = chr(65+idx)
@@ -122,19 +148,23 @@ if file_2b and file_pr:
                 f"=SUBTOTAL(9,{col_letter}3:{col_letter}{MAX_ROWS})"
             )
 
-        # Row 2 – Header
+        # Row 2 = Headers (only once)
         for col_num, col_name in enumerate(recon_df.columns):
-            sheet.write(1, col_num, col_name, header)
+            sheet.write(1, col_num, col_name, header_format)
 
-        # ---------------- RAW DATA SHEETS ----------------
+        # Auto width
+        for i, col in enumerate(recon_df.columns):
+            width = max(recon_df[col].astype(str).map(len).max(), len(col)) + 2
+            sheet.set_column(i, i, width)
+
+        # ---------- RAW DATA ----------
         df_2b.to_excel(writer, sheet_name="2B Data", index=False)
         df_pr.to_excel(writer, sheet_name="Books Data", index=False)
 
-        # ---------------- DASHBOARD (CHARTS ONLY) ----------------
+        # ---------- DASHBOARD ----------
         dash = workbook.add_worksheet("Dashboard")
 
-        # Matching Status Summary (Formula Based)
-        dash.write_row("A1",["Status","Count"],header)
+        dash.write_row("A1",["Status","Count"],header_format)
 
         statuses = ["Exact","Exact (Tolerance)",
                     "Value Mismatch","Missing in PR","Missing in 2B"]
@@ -152,19 +182,13 @@ if file_2b and file_pr:
             'values': '=Dashboard!$B$2:$B$6',
             'data_labels': {'percentage':True}
         })
-        dash.insert_chart('D2',pie)
 
-        # Top 10 2B Vendors – Using Pivot Table Formula Approach
-        dash.write("A10","Top 10 2B Vendors (Dynamic)",header)
+        dash.insert_chart('D2', pie)
 
-        dash.write_formula(
-            "A11",
-            '=SORTBY(UNIQUE(\'2B Data\'!A2:A15000),'
-            'SUMIFS(\'2B Data\'!E:E,\'2B Data\'!A:A,UNIQUE(\'2B Data\'!A2:A15000)),-1)'
-        )
+    st.success("Reconciliation generated successfully")
 
     st.download_button(
-        "⬇ Download Formula Based Enterprise Excel",
+        "Download Enterprise Excel",
         output.getvalue(),
-        "GST_Reconciliation_Enterprise.xlsx"
+        "GST_Reconciliation_Final.xlsx"
     )
