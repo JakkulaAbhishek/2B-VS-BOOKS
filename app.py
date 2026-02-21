@@ -6,7 +6,7 @@ import xlsxwriter
 
 TOLERANCE = 20
 
-st.set_page_config(page_title="GST 2B vs Books", layout="wide")
+st.set_page_config(page_title="GSTR 2B vs Books", layout="wide")
 st.title("GST 2B vs Purchase Reconciliation Tool")
 
 # ---------------- TEMPLATE ----------------
@@ -53,13 +53,15 @@ if file_2b and file_pr:
     df_2b["PRIMARY_KEY"] = df_2b["SUPPLIER GSTIN"].astype(str) + "|" + df_2b["DOCUMENT NUMBER"].astype(str)
     df_pr["PRIMARY_KEY"] = df_pr["SUPPLIER GSTIN"].astype(str) + "|" + df_pr["DOCUMENT NUMBER"].astype(str)
 
-    merged = pd.merge(df_2b, df_pr,
-                      on="PRIMARY_KEY",
-                      how="outer",
-                      suffixes=(" (2B)", " (PR)"),
-                      indicator=True)
+    merged = pd.merge(
+        df_2b, df_pr,
+        on="PRIMARY_KEY",
+        how="outer",
+        suffixes=(" (2B)", " (PR)"),
+        indicator=True
+    )
 
-    rows = []
+    records = []
 
     for _, row in merged.iterrows():
 
@@ -75,8 +77,8 @@ if file_2b and file_pr:
         sgst_2b = float(row.get("SGST (2B)",0))
         sgst_pr = float(row.get("SGST (PR)",0))
 
-        total_tax_2b = igst_2b + cgst_2b + sgst_2b
-        total_tax_pr = igst_pr + cgst_pr + sgst_pr
+        total_2b = igst_2b + cgst_2b + sgst_2b
+        total_pr = igst_pr + cgst_pr + sgst_pr
 
         if row["_merge"] == "both":
             diff = abs(taxable_2b - taxable_pr)
@@ -91,48 +93,51 @@ if file_2b and file_pr:
         else:
             status = "Missing in 2B"
 
-        supplier_name = row.get("SUPPLIER NAME (2B)")
-        if pd.isna(supplier_name) or supplier_name == "":
-            supplier_name = row.get("SUPPLIER NAME (PR)", "")
+        supplier = row.get("SUPPLIER NAME (2B)")
+        if pd.isna(supplier) or supplier == "":
+            supplier = row.get("SUPPLIER NAME (PR)", "")
 
-        rows.append({
-            "Match Status": status,
-            "Supplier Name": supplier_name,
-            "Supplier GSTIN (2B)": row.get("SUPPLIER GSTIN (2B)", ""),
-            "Supplier GSTIN (PR)": row.get("SUPPLIER GSTIN (PR)", ""),
-            "My GSTIN (2B)": row.get("MY GSTIN (2B)", ""),
-            "My GSTIN (PR)": row.get("MY GSTIN (PR)", ""),
-            "Document Number (2B)": row.get("DOCUMENT NUMBER (2B)", ""),
-            "Document Number (PR)": row.get("DOCUMENT NUMBER (PR)", ""),
-            "Taxable Value (2B)": taxable_2b,
-            "Taxable Value (PR)": taxable_pr,
-            "Tax Difference (2B-PR)": taxable_2b - taxable_pr,
-            "Total Tax (2B)": total_tax_2b,
-            "Total Tax (PR)": total_tax_pr,
-            "IGST (2B)": igst_2b,
-            "IGST (PR)": igst_pr,
-            "CGST (2B)": cgst_2b,
-            "CGST (PR)": cgst_pr,
-            "SGST (2B)": sgst_2b,
-            "SGST (PR)": sgst_pr
-        })
+        records.append([
+            status,
+            supplier,
+            row.get("SUPPLIER GSTIN (2B)",""),
+            row.get("SUPPLIER GSTIN (PR)",""),
+            row.get("MY GSTIN (2B)",""),
+            row.get("MY GSTIN (PR)",""),
+            row.get("DOCUMENT NUMBER (2B)",""),
+            row.get("DOCUMENT NUMBER (PR)",""),
+            taxable_2b,
+            taxable_pr,
+            taxable_2b - taxable_pr,
+            total_2b,
+            total_pr,
+            igst_2b,
+            igst_pr,
+            cgst_2b,
+            cgst_pr,
+            sgst_2b,
+            sgst_pr
+        ])
 
-    recon_df = pd.DataFrame(rows)
+    columns = [
+        "Match Status","Supplier Name",
+        "Supplier GSTIN (2B)","Supplier GSTIN (PR)",
+        "My GSTIN (2B)","My GSTIN (PR)",
+        "Document Number (2B)","Document Number (PR)",
+        "Taxable Value (2B)","Taxable Value (PR)",
+        "Tax Difference (2B-PR)",
+        "Total Tax (2B)","Total Tax (PR)",
+        "IGST (2B)","IGST (PR)",
+        "CGST (2B)","CGST (PR)",
+        "SGST (2B)","SGST (PR)"
+    ]
+
+    recon_df = pd.DataFrame(records, columns=columns)
 
     st.success("Reconciliation Completed")
     st.dataframe(recon_df)
 
-    # -------- SAFE NUMERIC AGGREGATION --------
-    igst_2b_total = pd.to_numeric(recon_df["IGST (2B)"], errors="coerce").fillna(0).sum()
-    igst_pr_total = pd.to_numeric(recon_df["IGST (PR)"], errors="coerce").fillna(0).sum()
-
-    cgst_2b_total = pd.to_numeric(recon_df["CGST (2B)"], errors="coerce").fillna(0).sum()
-    cgst_pr_total = pd.to_numeric(recon_df["CGST (PR)"], errors="coerce").fillna(0).sum()
-
-    sgst_2b_total = pd.to_numeric(recon_df["SGST (2B)"], errors="coerce").fillna(0).sum()
-    sgst_pr_total = pd.to_numeric(recon_df["SGST (PR)"], errors="coerce").fillna(0).sum()
-
-    # -------- EXCEL --------
+    # ---------------- EXCEL EXPORT ----------------
     output = io.BytesIO()
     workbook = xlsxwriter.Workbook(output)
 
@@ -141,56 +146,62 @@ if file_2b and file_pr:
     sheet_2b = workbook.add_worksheet("2B Data")
     sheet_pr = workbook.add_worksheet("Books Data")
 
-    header = workbook.add_format({'bold':True,'bg_color':'#D9E1F2','border':1})
+    header_format = workbook.add_format({
+        'bold': True,
+        'bg_color': '#D9E1F2',
+        'border':1
+    })
 
-    # Write reconciliation
-    for col_num, col in enumerate(recon_df.columns):
-        recon_sheet.write(0,col_num,col,header)
+    # Write reconciliation safely
+    for col_num, col in enumerate(columns):
+        recon_sheet.write(0, col_num, col, header_format)
 
-    for r,row in enumerate(recon_df.values):
-        for c,val in enumerate(row):
-            recon_sheet.write(r+1,c,val)
+    for r in range(len(records)):
+        for c in range(len(columns)):
+            val = records[r][c]
+            if isinstance(val, (int,float)):
+                recon_sheet.write(r+1,c,float(val))
+            else:
+                recon_sheet.write(r+1,c,str(val))
 
-    # Write raw sheets
-    df_2b.to_excel(pd.ExcelWriter(output, engine='xlsxwriter'), sheet_name="2B Data")
-    df_pr.to_excel(pd.ExcelWriter(output, engine='xlsxwriter'), sheet_name="Books Data")
+    # Write raw sheets manually
+    for col_num, col in enumerate(df_2b.columns):
+        sheet_2b.write(0,col_num,col,header_format)
+    for r in range(len(df_2b)):
+        for c in range(len(df_2b.columns)):
+            sheet_2b.write(r+1,c,str(df_2b.iloc[r,c]))
 
-    # Dashboard - Match Status Pie
+    for col_num, col in enumerate(df_pr.columns):
+        sheet_pr.write(0,col_num,col,header_format)
+    for r in range(len(df_pr)):
+        for c in range(len(df_pr.columns)):
+            sheet_pr.write(r+1,c,str(df_pr.iloc[r,c]))
+
+    # -------- DASHBOARD PIE CHARTS --------
     status_counts = recon_df["Match Status"].value_counts()
 
-    dash_sheet.write_row("A1",["Status","Count"],header)
-
-    for i,(k,v) in enumerate(status_counts.items()):
-        dash_sheet.write(i+1,0,k)
-        dash_sheet.write(i+1,1,v)
+    dash_sheet.write_row("A1",["Status","Count"],header_format)
+    row_index = 1
+    for k,v in status_counts.items():
+        dash_sheet.write(row_index,0,k)
+        dash_sheet.write(row_index,1,int(v))
+        row_index += 1
 
     pie1 = workbook.add_chart({'type':'pie'})
     pie1.add_series({
-        'categories': f'=Dashboard!$A$2:$A${len(status_counts)+1}',
-        'values': f'=Dashboard!$B$2:$B${len(status_counts)+1}',
+        'categories': f'=Dashboard!$A$2:$A${row_index}',
+        'values': f'=Dashboard!$B$2:$B${row_index}',
         'data_labels': {'percentage':True}
     })
-    dash_sheet.insert_chart('D2',pie1)
-
-    # IGST Pie
-    dash_sheet.write("A6","IGST 2B")
-    dash_sheet.write("B6",igst_2b_total)
-    dash_sheet.write("A7","IGST PR")
-    dash_sheet.write("B7",igst_pr_total)
-
-    pie2 = workbook.add_chart({'type':'pie'})
-    pie2.add_series({
-        'categories':'=Dashboard!$A$6:$A$7',
-        'values':'=Dashboard!$B$6:$B$7',
-        'data_labels':{'percentage':True}
-    })
-    dash_sheet.insert_chart('D18',pie2)
+    dash_sheet.insert_chart('D2', pie1)
 
     workbook.close()
 
-    st.download_button("Download Final Reconciliation Report",
-                       output.getvalue(),
-                       "GST_Reconciliation_Report.xlsx")
+    st.download_button(
+        "Download Final Reconciliation Report",
+        output.getvalue(),
+        "GST_Reconciliation_Report.xlsx"
+    )
 
 st.markdown("""
 <hr>
