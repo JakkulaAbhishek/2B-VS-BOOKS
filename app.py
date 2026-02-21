@@ -51,9 +51,6 @@ if file_2b and file_pr:
         df_2b[col] = pd.to_numeric(df_2b[col], errors="coerce").fillna(0)
         df_pr[col] = pd.to_numeric(df_pr[col], errors="coerce").fillna(0)
 
-    df_2b["DOCUMENT DATE"] = pd.to_datetime(df_2b["DOCUMENT DATE"], errors="coerce")
-    df_pr["DOCUMENT DATE"] = pd.to_datetime(df_pr["DOCUMENT DATE"], errors="coerce")
-
     df_2b["PRIMARY_KEY"] = df_2b["SUPPLIER GSTIN"].astype(str) + "|" + df_2b["DOCUMENT NUMBER"].astype(str)
     df_pr["PRIMARY_KEY"] = df_pr["SUPPLIER GSTIN"].astype(str) + "|" + df_pr["DOCUMENT NUMBER"].astype(str)
 
@@ -91,74 +88,106 @@ if file_2b and file_pr:
         output_rows.append({
             "Match Status": status,
             "Supplier Name": row.get("SUPPLIER NAME (2B)", row.get("SUPPLIER NAME (PR)", "")),
-            "Supplier GSTIN (2B)": row.get("SUPPLIER GSTIN (2B)", ""),
-            "Supplier GSTIN (PR)": row.get("SUPPLIER GSTIN (PR)", ""),
-            "My GSTIN (2B)": row.get("MY GSTIN (2B)", ""),
-            "My GSTIN (PR)": row.get("MY GSTIN (PR)", ""),
-            "Document Number (2B)": row.get("DOCUMENT NUMBER (2B)", ""),
-            "Document Number (PR)": row.get("DOCUMENT NUMBER (PR)", ""),
-            "Document Date (2B)": str(row.get("DOCUMENT DATE (2B)", "")),
-            "Document Date (PR)": str(row.get("DOCUMENT DATE (PR)", "")),
             "Taxable Value (2B)": taxable_2b,
-            "Taxable Value (PR)": taxable_pr,
-            "Tax Difference (2B-PR)": taxable_2b - taxable_pr,
-            "Total Tax (2B)": tax_2b,
-            "Total Tax (PR)": tax_pr,
-            "IGST (2B)": row.get("IGST (2B)",0),
-            "IGST (PR)": row.get("IGST (PR)",0),
-            "CGST (2B)": row.get("CGST (2B)",0),
-            "CGST (PR)": row.get("CGST (PR)",0),
-            "SGST (2B)": row.get("SGST (2B)",0),
-            "SGST (PR)": row.get("SGST (PR)",0),
+            "Taxable Value (PR)": taxable_pr
         })
 
-    final_df = pd.DataFrame(output_rows).fillna("")
+    final_df = pd.DataFrame(output_rows)
 
     st.success("Reconciliation Completed")
     st.dataframe(final_df)
 
-    # ---------------- EXCEL GENERATION ----------------
+    # ---------------- EXCEL EXPORT ----------------
     output = io.BytesIO()
     workbook = xlsxwriter.Workbook(output)
-    worksheet = workbook.add_worksheet("Reconciliation")
-    dashboard = workbook.add_worksheet("Dashboard")
 
-    header_format = workbook.add_format({
-        'bold': True,
-        'bg_color': '#D9E1F2',
-        'border':1
-    })
+    recon_sheet = workbook.add_worksheet("Reconciliation")
+    dash_sheet = workbook.add_worksheet("Dashboard")
+    sheet_2b = workbook.add_worksheet("2B Data")
+    sheet_pr = workbook.add_worksheet("PR Data")
 
-    # Write data
-    for col_num, value in enumerate(final_df.columns.values):
-        worksheet.write(0, col_num, value, header_format)
-        worksheet.set_column(col_num, col_num, 18)
+    header_format = workbook.add_format({'bold': True, 'bg_color': '#D9E1F2', 'border':1})
+
+    # Write Reconciliation
+    for col_num, col_name in enumerate(final_df.columns):
+        recon_sheet.write(0, col_num, col_name, header_format)
 
     for row_num, row_data in enumerate(final_df.values):
-        for col_num, cell_data in enumerate(row_data):
-            worksheet.write(row_num+1, col_num, str(cell_data))
+        for col_num, cell in enumerate(row_data):
+            recon_sheet.write(row_num+1, col_num, cell)
 
-    # ---------------- DASHBOARD ----------------
-    status_counts = final_df["Match Status"].value_counts().reset_index()
-    status_counts.columns = ["Status", "Count"]
+    # Write original data
+    df_2b.to_excel(pd.ExcelWriter(output, engine='xlsxwriter'), sheet_name="2B Data")
 
-    dashboard.write_row("A1", ["Status","Count"], header_format)
-    for i, row in status_counts.iterrows():
-        dashboard.write_row(i+1, 0, row.values)
+    # Instead manual writing to avoid conflict
+    for col_num, col_name in enumerate(df_2b.columns):
+        sheet_2b.write(0, col_num, col_name, header_format)
+    for row_num, row_data in enumerate(df_2b.values):
+        for col_num, cell in enumerate(row_data):
+            sheet_2b.write(row_num+1, col_num, cell)
 
-    chart = workbook.add_chart({'type': 'pie'})
+    for col_num, col_name in enumerate(df_pr.columns):
+        sheet_pr.write(0, col_num, col_name, header_format)
+    for row_num, row_data in enumerate(df_pr.values):
+        for col_num, cell in enumerate(row_data):
+            sheet_pr.write(row_num+1, col_num, cell)
+
+    last_row = len(final_df) + 1
+
+    # ---------------- DASHBOARD FORMULAS ----------------
+    dash_sheet.write("A1","Exact")
+    dash_sheet.write("B1", f"=COUNTIF(Reconciliation!A2:A{last_row},\"Exact*\")")
+
+    dash_sheet.write("A2","Missing in PR")
+    dash_sheet.write("B2", f"=COUNTIF(Reconciliation!A2:A{last_row},\"Missing in PR\")")
+
+    dash_sheet.write("A3","Missing in 2B")
+    dash_sheet.write("B3", f"=COUNTIF(Reconciliation!A2:A{last_row},\"Missing in 2B\")")
+
+    dash_sheet.write("A4","Value Mismatch")
+    dash_sheet.write("B4", f"=COUNTIF(Reconciliation!A2:A{last_row},\"Value Mismatch\")")
+
+    # Pie Chart
+    chart = workbook.add_chart({'type':'pie'})
     chart.add_series({
-        'categories': f"=Dashboard!$A$2:$A${len(status_counts)+1}",
-        'values':     f"=Dashboard!$B$2:$B${len(status_counts)+1}",
-        'data_labels': {'percentage': True}
+        'categories': '=Dashboard!$A$1:$A$4',
+        'values': '=Dashboard!$B$1:$B$4',
+        'data_labels': {'percentage':True}
     })
-    chart.set_title({'name': 'Match Status Distribution'})
-    dashboard.insert_chart('D2', chart)
+    dash_sheet.insert_chart('D2', chart)
+
+    # ---------------- TOP 10 2B ----------------
+    top2b = df_2b.groupby("SUPPLIER NAME")["TAXABLE VALUE"].sum().sort_values(ascending=False).head(10)
+    dash_sheet.write("A7","Top 10 2B Parties")
+    for i,(name,val) in enumerate(top2b.items()):
+        dash_sheet.write(i+8,0,name)
+        dash_sheet.write(i+8,1,val)
+
+    chart2 = workbook.add_chart({'type':'column'})
+    chart2.add_series({
+        'categories': f'=Dashboard!$A$9:$A${8+len(top2b)}',
+        'values': f'=Dashboard!$B$9:$B${8+len(top2b)}'
+    })
+    dash_sheet.insert_chart('D15', chart2)
+
+    # ---------------- TOP 10 PR ----------------
+    toppr = df_pr.groupby("SUPPLIER NAME")["TAXABLE VALUE"].sum().sort_values(ascending=False).head(10)
+    dash_sheet.write("F7","Top 10 PR Parties")
+    for i,(name,val) in enumerate(toppr.items()):
+        dash_sheet.write(i+8,5,name)
+        dash_sheet.write(i+8,6,val)
+
+    chart3 = workbook.add_chart({'type':'column'})
+    chart3.add_series({
+        'categories': f'=Dashboard!$F$9:$F${8+len(toppr)}',
+        'values': f'=Dashboard!$G$9:$G${8+len(toppr)}'
+    })
+    dash_sheet.insert_chart('J15', chart3)
 
     workbook.close()
 
     st.download_button(
-        "Download Final Reconciliation Report",
+        "Download Full Reconciliation Report",
         output.getvalue(),
         "GST_Reconciliation_Report.xlsx"
     )
