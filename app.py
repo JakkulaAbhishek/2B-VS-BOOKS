@@ -5,57 +5,131 @@ import io
 from datetime import datetime
 import plotly.express as px
 
-# ================= CONFIG & UI SETUP =================
-st.set_page_config(page_title="GST Recon Pro", layout="wide", initial_sidebar_state="expanded")
+# ================= CONFIG =================
+st.set_page_config(
+    page_title="GST Recon Pro",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
-# ================= ULTRA STYLISH CSS =================
+# ================= PREMIUM UI DESIGN =================
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;800&display=swap');
-    html, body, [class*="css"] { font-family: 'Poppins', sans-serif; }
-    .stApp { background: #0f172a; color: #f8fafc; }
-    h1 {
-        background: linear-gradient(90deg, #38bdf8, #818cf8, #c084fc);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        font-weight: 800; font-size: 3rem !important; margin-bottom: 0px !important;
-    }
-    .subtitle { color: #94a3b8; font-size: 1.1rem; margin-bottom: 2rem; }
-    .stButton>button {
-        background: linear-gradient(90deg, #3b82f6, #8b5cf6); color: white;
-        border: none; border-radius: 8px; padding: 10px 24px; font-weight: 600;
-        transition: all 0.3s ease; width: 100%;
-    }
-    .stButton>button:hover { transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(139, 92, 246, 0.5); }
-    [data-testid="stMetric"] {
-        background: rgba(30, 41, 59, 0.6); border: 1px solid rgba(255, 255, 255, 0.1);
-        backdrop-filter: blur(10px); padding: 20px; border-radius: 16px;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-    }
-    [data-testid="stMetricValue"] { color: #38bdf8; font-weight: 800; }
-    [data-testid="stSidebar"] { background-color: #1e293b; border-right: 1px solid #334155; }
-    .insight-box {
-        background: rgba(30, 41, 59, 0.6); padding: 18px; 
-        border-left: 5px solid #38bdf8; border-radius: 8px; 
-        margin-bottom: 12px; font-size: 1.05rem; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
-    }
-    .web-branding {
-        text-align: center; margin-top: 50px; padding: 20px;
-        border-top: 1px solid rgba(255,255,255,0.1); color: #94a3b8; font-size: 1rem;
-    }
-    .web-branding b { color: #38bdf8; letter-spacing: 1px; }
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap');
+
+html, body, [class*="css"]  {
+    font-family: 'Inter', sans-serif;
+}
+
+/* -------- Animated Gradient Background -------- */
+.stApp {
+    background: linear-gradient(-45deg, #0f2027, #203a43, #2c5364, #1c1c3c);
+    background-size: 400% 400%;
+    animation: gradientBG 12s ease infinite;
+    color: #ffffff;
+}
+
+@keyframes gradientBG {
+    0% {background-position: 0% 50%;}
+    50% {background-position: 100% 50%;}
+    100% {background-position: 0% 50%;}
+}
+
+/* -------- Header Styling -------- */
+h1 {
+    font-size: 3.2rem !important;
+    font-weight: 800;
+    background: linear-gradient(90deg, #00f5a0, #00d9f5);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 0px !important;
+}
+
+.subtitle {
+    color: #d1d5db;
+    font-size: 1.1rem;
+    margin-bottom: 2rem;
+}
+
+/* -------- Sidebar -------- */
+[data-testid="stSidebar"] {
+    background: rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(12px);
+    border-right: 1px solid rgba(255,255,255,0.1);
+}
+
+/* -------- Buttons -------- */
+.stButton>button {
+    background: linear-gradient(90deg, #00c6ff, #0072ff);
+    color: white;
+    border: none;
+    padding: 12px 24px;
+    font-weight: 600;
+    border-radius: 10px;
+    transition: 0.3s ease;
+    box-shadow: 0 4px 15px rgba(0, 114, 255, 0.4);
+}
+
+.stButton>button:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 20px rgba(0, 114, 255, 0.7);
+}
+
+/* -------- Metrics Cards -------- */
+[data-testid="stMetric"] {
+    background: rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(14px);
+    border-radius: 18px;
+    padding: 20px;
+    border: 1px solid rgba(255,255,255,0.15);
+    box-shadow: 0 8px 25px rgba(0,0,0,0.4);
+}
+
+[data-testid="stMetricValue"] {
+    font-size: 1.8rem;
+    font-weight: 800;
+    color: #00f5a0;
+}
+
+/* -------- Insight Box -------- */
+.insight-box {
+    background: rgba(255, 255, 255, 0.07);
+    border-left: 6px solid #00f5a0;
+    padding: 18px;
+    border-radius: 10px;
+    margin-bottom: 12px;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+}
+
+/* -------- DataFrame Styling -------- */
+[data-testid="stDataFrame"] {
+    background: rgba(255,255,255,0.05);
+    border-radius: 12px;
+    padding: 10px;
+}
+
+/* -------- Footer Branding -------- */
+.web-branding {
+    text-align: center;
+    margin-top: 50px;
+    padding: 20px;
+    border-top: 1px solid rgba(255,255,255,0.15);
+    color: #d1d5db;
+    font-size: 1rem;
+}
+
+.web-branding b {
+    color: #00f5a0;
+    letter-spacing: 1px;
+}
+
 </style>
 """, unsafe_allow_html=True)
 
-# ================= SIDEBAR =================
-with st.sidebar:
-    st.markdown("### ⚙️ Engine Settings")
-    tolerance = st.number_input("Mismatch Tolerance (₹)", min_value=0, value=20, step=1)
-    max_rows = st.number_input("Max Rows for Excel Formulas", min_value=1000, value=15000, step=1000)
-
 # ================= HEADER =================
 st.markdown("<h1>GST Recon Pro</h1>", unsafe_allow_html=True)
-st.markdown('<p class="subtitle">AI-Powered reconciliation with Smart Invoice Matching & Financial Insights.</p>', unsafe_allow_html=True)
+st.markdown('<p class="subtitle">AI-Powered Smart GST Reconciliation Dashboard</p>', unsafe_allow_html=True)
 
 # ================= SAMPLE TEMPLATES GENERATOR =================
 def generate_sample_templates():
