@@ -8,45 +8,119 @@ import plotly.express as px
 # ================= CONFIG & UI SETUP =================
 st.set_page_config(page_title="GST Recon Pro", layout="wide", initial_sidebar_state="expanded")
 
-# ================= ULTRA STYLISH CSS =================
+# ================= CLEAN THEME-ADAPTIVE UI =================
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;800&display=swap');
-    html, body, [class*="css"] { font-family: 'Poppins', sans-serif; }
-    .stApp { background: #0f172a; color: #f8fafc; }
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap');
+
+    html, body, [class*="css"]  {
+        font-family: 'Inter', sans-serif;
+    }
+
+    /* Let Streamlit theme control background */
+    .stApp {
+        background-color: transparent;
+    }
+
+    /* Header Gradient Text (works in light & dark) */
     h1 {
-        background: linear-gradient(90deg, #38bdf8, #818cf8, #c084fc);
+        font-weight: 800;
+        font-size: 3rem !important;
+        background: linear-gradient(90deg, #2563eb, #7c3aed);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
-        font-weight: 800; font-size: 3rem !important; margin-bottom: 0px !important;
+        margin-bottom: 0px !important;
     }
-    .subtitle { color: #94a3b8; font-size: 1.1rem; margin-bottom: 2rem; }
+
+    .subtitle {
+        font-size: 1.1rem;
+        opacity: 0.8;
+        margin-bottom: 2rem;
+    }
+
+    /* Sidebar */
+    [data-testid="stSidebar"] {
+        backdrop-filter: blur(8px);
+        border-right: 1px solid rgba(0,0,0,0.08);
+    }
+
+    /* Buttons */
     .stButton>button {
-        background: linear-gradient(90deg, #3b82f6, #8b5cf6); color: white;
-        border: none; border-radius: 8px; padding: 10px 24px; font-weight: 600;
-        transition: all 0.3s ease; width: 100%;
+        background: linear-gradient(90deg, #2563eb, #7c3aed);
+        color: white;
+        border-radius: 8px;
+        padding: 10px 24px;
+        font-weight: 600;
+        border: none;
+        transition: all 0.3s ease;
     }
-    .stButton>button:hover { transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(139, 92, 246, 0.5); }
+
+    .stButton>button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 15px rgba(37, 99, 235, 0.4);
+    }
+
+    /* Metric Cards */
     [data-testid="stMetric"] {
-        background: rgba(30, 41, 59, 0.6); border: 1px solid rgba(255, 255, 255, 0.1);
-        backdrop-filter: blur(10px); padding: 20px; border-radius: 16px;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        background: rgba(255, 255, 255, 0.4);
+        backdrop-filter: blur(12px);
+        border-radius: 14px;
+        padding: 20px;
+        border: 1px solid rgba(0,0,0,0.05);
     }
-    [data-testid="stMetricValue"] { color: #38bdf8; font-weight: 800; }
-    [data-testid="stSidebar"] { background-color: #1e293b; border-right: 1px solid #334155; }
+
+    /* Dark mode metric fix */
+    @media (prefers-color-scheme: dark) {
+        [data-testid="stMetric"] {
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+    }
+
+    [data-testid="stMetricValue"] {
+        font-weight: 800;
+        font-size: 1.8rem;
+    }
+
+    /* Insight Box */
     .insight-box {
-        background: rgba(30, 41, 59, 0.6); padding: 18px; 
-        border-left: 5px solid #38bdf8; border-radius: 8px; 
-        margin-bottom: 12px; font-size: 1.05rem; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+        padding: 18px;
+        border-radius: 10px;
+        margin-bottom: 12px;
+        border-left: 5px solid #2563eb;
+        background: rgba(37, 99, 235, 0.08);
     }
+
+    /* Dark mode insight fix */
+    @media (prefers-color-scheme: dark) {
+        .insight-box {
+            background: rgba(37, 99, 235, 0.15);
+        }
+    }
+
+    /* Dataframe */
+    [data-testid="stDataFrame"] {
+        border-radius: 12px;
+        overflow: hidden;
+    }
+
+    /* Footer */
     .web-branding {
-        text-align: center; margin-top: 50px; padding: 20px;
-        border-top: 1px solid rgba(255,255,255,0.1); color: #94a3b8; font-size: 1rem;
+        text-align: center;
+        margin-top: 50px;
+        padding: 20px;
+        border-top: 1px solid rgba(0,0,0,0.08);
+        font-size: 0.95rem;
+        opacity: 0.8;
     }
-    .web-branding b { color: #38bdf8; letter-spacing: 1px; }
+
+    .web-branding b {
+        color: #2563eb;
+        letter-spacing: 1px;
+    }
+
 </style>
 """, unsafe_allow_html=True)
-
 # ================= SIDEBAR =================
 with st.sidebar:
     st.markdown("### ⚙️ Engine Settings")
