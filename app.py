@@ -8,106 +8,109 @@ import plotly.express as px
 # ================= CONFIG & UI SETUP =================
 st.set_page_config(page_title="GST Recon Pro", layout="wide", initial_sidebar_state="expanded")
 
-# ================= ENHANCED HIGH-CONTRAST UI CSS =================
+# ================= HIGH-CONTRAST LIGHT UI CSS =================
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;800&display=swap');
     
-    /* Global Styles */
+    /* Global Styles - Light Theme */
     html, body, [class*="css"] { 
         font-family: 'Poppins', sans-serif; 
     }
     .stApp { 
-        background-color: #0f172a; 
-        color: #ffffff; 
+        background-color: #ffffff; 
+        color: #1e293b; 
     }
 
-    /* Headings */
+    /* Headings - Dark & Professional */
     h1 {
-        background: linear-gradient(90deg, #38bdf8, #818cf8, #c084fc);
+        background: linear-gradient(90deg, #1e40af, #3b82f6);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         font-weight: 800; font-size: 3.5rem !important; 
         margin-bottom: 5px !important;
-        text-shadow: 2px 2px 10px rgba(0,0,0,0.3);
     }
     .subtitle { 
-        color: #cbd5e1; 
+        color: #475569; 
         font-size: 1.2rem; 
         margin-bottom: 2rem; 
-        font-weight: 400;
+        font-weight: 500;
     }
 
-    /* Sidebar Contrast */
+    /* Sidebar - Light Gray Contrast */
     [data-testid="stSidebar"] {
-        background-color: #1e293b !important;
-        border-right: 1px solid #334155;
+        background-color: #f8fafc !important;
+        border-right: 1px solid #e2e8f0;
     }
     [data-testid="stSidebar"] .stMarkdown p, [data-testid="stSidebar"] label {
-        color: #f8fafc !important;
+        color: #1e293b !important;
         font-weight: 600;
     }
 
-    /* Metrics Cards */
+    /* Metrics Cards - High Visibility */
     [data-testid="stMetric"] {
-        background: #1e293b;
-        border: 1px solid #334155;
+        background: #f1f5f9;
+        border: 1px solid #cbd5e1;
         padding: 25px;
         border-radius: 16px;
-        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
     }
     [data-testid="stMetricLabel"] {
-        color: #94a3b8 !important;
+        color: #64748b !important;
         font-size: 1rem !important;
         font-weight: 600 !important;
     }
     [data-testid="stMetricValue"] {
-        color: #38bdf8 !important;
+        color: #1e40af !important;
         font-weight: 800 !important;
     }
 
-    /* Insight Boxes - Enhanced Contrast */
+    /* Insight Boxes - Professional Blue */
     .insight-box {
-        background: #1e293b;
+        background: #eff6ff;
         padding: 20px; 
-        border-left: 6px solid #38bdf8; 
+        border-left: 6px solid #2563eb; 
         border-radius: 8px; 
         margin-bottom: 15px; 
-        color: #f8fafc;
+        color: #1e3a8a;
         font-size: 1.1rem;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        font-weight: 500;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
     }
 
-    /* Buttons */
+    /* Buttons - Solid Blue */
     .stButton>button {
-        background: linear-gradient(90deg, #2563eb, #7c3aed); 
+        background: #2563eb; 
         color: #ffffff !important;
         border: none; border-radius: 10px; padding: 12px 24px; 
         font-weight: 700;
         transition: all 0.3s ease;
     }
     .stButton>button:hover {
-        transform: scale(1.02);
-        box-shadow: 0 0 20px rgba(124, 58, 237, 0.4);
+        background: #1d4ed8;
+        box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
         color: #ffffff !important;
     }
 
-    /* Dataframe Header Visibility */
+    /* Dataframe Visibility */
     .stDataFrame {
-        background-color: #1e293b;
+        border: 1px solid #e2e8f0;
         border-radius: 10px;
     }
 
-    /* Footer Branding */
+    /* Branding - Black text on White */
     .web-branding {
         text-align: center; margin-top: 60px; padding: 30px;
-        border-top: 1px solid #334155; color: #94a3b8; font-size: 1.1rem;
+        border-top: 1px solid #e2e8f0; 
+        color: #000000; 
+        font-size: 1.1rem;
+        background-color: #ffffff;
     }
-    .web-branding b { color: #38bdf8; letter-spacing: 1.5px; }
+    .web-branding b { color: #2563eb; letter-spacing: 1.5px; }
 
-    /* File Uploader Text */
-    .st-emotion-cache-1ae8k9h e1b2p2ww14 {
-        color: white !important;
+    /* File Uploader Correction */
+    [data-testid="stFileUploader"] {
+        color: #000000 !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -120,9 +123,9 @@ with st.sidebar:
 
 # ================= HEADER =================
 st.markdown("<h1>GST Recon Pro</h1>", unsafe_allow_html=True)
-st.markdown('<p class="subtitle">Intelligent Reconciliation with High-Contrast Financial Visibility.</p>', unsafe_allow_html=True)
+st.markdown('<p class="subtitle">Clean, High-Contrast Reconciliation for Financial Professionals.</p>', unsafe_allow_html=True)
 
-# ================= LOGIC FUNCTIONS (Unchanged from original logic) =================
+# ================= LOGIC FUNCTIONS =================
 def generate_sample_templates():
     cols = ["SUPPLIER GSTIN*", "DOCUMENT NUMBER*", "TAXABLE VALUE*", "IGST*", "CGST*", "SGST*", "SUPPLIER NAME", "MY GSTIN", "DOCUMENT DATE"]
     sample_data = [
@@ -146,55 +149,50 @@ def process_data_files(file_2b_bytes, file_pr_bytes):
     df_2b.columns = df_2b.columns.str.replace('*', '', regex=False).str.strip().str.upper()
     df_pr.columns = df_pr.columns.str.replace('*', '', regex=False).str.strip().str.upper()
     for df in [df_2b, df_pr]:
-        if "MY GSTIN" not in df.columns: df["MY GSTIN"] = ""
-        if "DOCUMENT DATE" not in df.columns: df["DOCUMENT DATE"] = ""
-        if "SUPPLIER GSTIN" not in df.columns: df["SUPPLIER GSTIN"] = ""
+        for col in ["MY GSTIN", "DOCUMENT DATE", "SUPPLIER GSTIN"]:
+            if col not in df.columns: df[col] = ""
         df["SUPPLIER GSTIN"] = df["SUPPLIER GSTIN"].fillna("UNKNOWN").astype(str).str.upper().str.strip()
+    
     numeric_cols = ["TAXABLE VALUE", "IGST", "CGST", "SGST"]
     for col in numeric_cols:
         df_2b[col] = pd.to_numeric(df_2b.get(col, 0), errors="coerce").fillna(0)
         df_pr[col] = pd.to_numeric(df_pr.get(col, 0), errors="coerce").fillna(0)
+    
     df_2b["NORM_DOC"] = normalize_invoice(df_2b["DOCUMENT NUMBER"])
     df_pr["NORM_DOC"] = normalize_invoice(df_pr["DOCUMENT NUMBER"])
-    df_2b["PAN"] = df_2b["SUPPLIER GSTIN"].str[2:12]
-    df_pr["PAN"] = df_pr["SUPPLIER GSTIN"].str[2:12]
-    df_2b["PAN_KEY"] = df_2b["PAN"] + "|" + df_2b["NORM_DOC"]
-    df_pr["PAN_KEY"] = df_pr["PAN"] + "|" + df_pr["NORM_DOC"]
+    df_2b["PAN_KEY"] = df_2b["SUPPLIER GSTIN"].str[2:12] + "|" + df_2b["NORM_DOC"]
+    df_pr["PAN_KEY"] = df_pr["SUPPLIER GSTIN"].str[2:12] + "|" + df_pr["NORM_DOC"]
+    
     merged = pd.merge(df_2b, df_pr, on="PAN_KEY", how="outer", suffixes=(" (2B)", " (PR)"), indicator=True)
-    return merged, df_2b, df_pr
+    return merged
 
 # ================= MAIN APP FLOW =================
 col_btn, empty_space = st.columns([1, 2])
 with col_btn:
     st.download_button(
-        label="📥 Download Templates",
+        label="📥 Download Excel Templates",
         data=generate_sample_templates(),
-        file_name="GST_Templates.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        file_name="GST_Templates.xlsx"
     )
 
 st.markdown("<br>", unsafe_allow_html=True)
 
-col1, col2 = st.columns(2)
-with col1:
-    file_2b = st.file_uploader("📄 Upload GSTR-2B Excel", type=["xlsx", "xls"])
-with col2:
-    file_pr = st.file_uploader("📘 Upload Purchase Register", type=["xlsx", "xls"])
+u1, u2 = st.columns(2)
+with u1:
+    file_2b = st.file_uploader("📄 Step 1: Upload GSTR-2B", type=["xlsx", "xls"])
+with u2:
+    file_pr = st.file_uploader("📘 Step 2: Upload Books", type=["xlsx", "xls"])
 
 if file_2b and file_pr:
     try:
-        with st.spinner("🚀 Analyzing Data..."):
-            merged, df_2b, df_pr = process_data_files(file_2b.getvalue(), file_pr.getvalue())
+        with st.spinner("⚙️ Processing..."):
+            merged = process_data_files(file_2b.getvalue(), file_pr.getvalue())
 
-            # Math calculations
+            # Math & Status
             merged["Total Tax (2B)"] = merged[["IGST (2B)", "CGST (2B)", "SGST (2B)"]].sum(axis=1)
             merged["Total Tax (PR)"] = merged[["IGST (PR)", "CGST (PR)", "SGST (PR)"]].sum(axis=1)
-            merged["TAXABLE VALUE (2B)"] = merged["TAXABLE VALUE (2B)"].fillna(0)
-            merged["TAXABLE VALUE (PR)"] = merged["TAXABLE VALUE (PR)"].fillna(0)
+            diff = (merged["TAXABLE VALUE (2B)"].fillna(0) - merged["TAXABLE VALUE (PR)"].fillna(0)).abs()
             
-            diff = (merged["TAXABLE VALUE (2B)"] - merged["TAXABLE VALUE (PR)"]).abs()
-            
-            # Simplified Logic for statuses
             conditions = [
                 (merged["_merge"] == "both") & (diff == 0),
                 (merged["_merge"] == "both") & (diff <= tolerance),
@@ -204,32 +202,31 @@ if file_2b and file_pr:
             statuses = ["Exact Match", "Within Tolerance", "Missing in Books", "Missing in 2B"]
             merged["Match Status"] = np.select(conditions, statuses, default="Mismatch")
             
-            # Dashboard Metrics
-            st.markdown("### 📊 Business Intelligence")
+            # Dashboard
+            st.markdown("### 📊 Reconciliation Summary")
             counts = merged["Match Status"].value_counts()
             m1, m2, m3, m4 = st.columns(4)
             m1.metric("Total Records", len(merged))
-            m2.metric("Matches", counts.get("Exact Match", 0))
-            m3.metric("Unclaimed ITC", f"₹{merged[merged['Match Status'] == 'Missing in Books']['Total Tax (2B)'].sum():,.0f}")
-            m4.metric("Potential Risk", f"₹{merged[merged['Match Status'] == 'Missing in 2B']['Total Tax (PR)'].sum():,.0f}")
+            m2.metric("Matches Found", counts.get("Exact Match", 0))
+            m3.metric("Books Missing", counts.get("Missing in Books", 0))
+            m4.metric("Unclaimed ITC (2B)", f"₹{merged[merged['Match Status'] == 'Missing in Books']['Total Tax (2B)'].sum():,.0f}")
 
-            # Insight Section
-            st.markdown("### 🧠 Smart Insights")
-            st.markdown(f"<div class='insight-box'>💡 <b>Action Required:</b> You have {counts.get('Missing in Books', 0)} invoices in GSTR-2B that are not in your books. Claiming these could save you tax outflow.</div>", unsafe_allow_html=True)
+            # Insights
+            st.markdown(f"<div class='insight-box'>💡 <b>Action Item:</b> Found {counts.get('Missing in Books', 0)} invoices in your 2B data that are not recorded in your Purchase Register. Verify these to maximize your ITC claim.</div>", unsafe_allow_html=True)
 
             # Charts
-            fig = px.pie(merged, names='Match Status', hole=0.4, color_discrete_sequence=px.colors.qualitative.Pastel)
-            fig.update_layout(paper_bgcolor="rgba(0,0,0,0)", font=dict(color="white"))
+            fig = px.pie(merged, names='Match Status', hole=0.5, color_discrete_sequence=px.colors.qualitative.Safe)
+            fig.update_layout(paper_bgcolor="white", plot_bgcolor="white", font=dict(color="black"))
             st.plotly_chart(fig, use_container_width=True)
 
             # Data Preview
-            st.markdown("### 🔍 Data Explorer")
-            st.dataframe(merged.drop(columns=['PAN_KEY', 'NORM_DOC'], errors='ignore').head(50), use_container_width=True)
+            st.markdown("### 🔍 Filtered Data Preview")
+            st.dataframe(merged.drop(columns=['PAN_KEY', 'NORM_DOC'], errors='ignore').head(100), use_container_width=True)
 
             # Download Result
             output = io.BytesIO()
             merged.to_excel(output, index=False)
-            st.download_button("⚡ Download Full Report", output.getvalue(), "GST_Reconciliation_Report.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            st.download_button("⚡ Download Final Reconciliation Report", output.getvalue(), "GST_Recon_Report.xlsx")
 
     except Exception as e:
         st.error(f"Error: {e}")
@@ -238,6 +235,6 @@ if file_2b and file_pr:
 st.markdown("""
 <div class="web-branding">
     Developed by <b>ABHISHEK JAKKULA</b><br>
-    jakkulaabhishek5@gmail.com
+    <b>Email:</b> jakkulaabhishek5@gmail.com
 </div>
 """, unsafe_allow_html=True)
