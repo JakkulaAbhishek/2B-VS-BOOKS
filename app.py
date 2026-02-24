@@ -52,12 +52,21 @@ h1 {
     margin-bottom: 2rem;
 }
 
-/* -------- Sidebar -------- */
-[data-testid="stSidebar"] {
-    background: rgba(0, 0, 0, 0.4);
-    backdrop-filter: blur(12px);
-    border-right: 1px solid rgba(255,255,255,0.1);
-}
+# ================= SIDEBAR SETTINGS =================
+with st.sidebar:
+    st.markdown("### ⚙️ Reconciliation Controls")
+    tolerance = st.number_input(
+        "Mismatch Tolerance (₹)",
+        min_value=0,
+        value=20,
+        step=1
+    )
+    max_rows = st.number_input(
+        "Max Rows for Excel Formulas",
+        min_value=1000,
+        value=15000,
+        step=1000
+    )
 
 /* -------- Buttons -------- */
 .stButton>button {
