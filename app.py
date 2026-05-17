@@ -1,6 +1,6 @@
 # ===================================================================
-# GST RECON PRO - Enterprise Grade Reconciliation
-# Exactly replicates the structure of your uploaded sample files
+# GST RECON PRO - EXACT MATCH OF YOUR SAMPLE FILES
+# Generates sample GSTR-2B and Purchase Register EXACTLY as uploaded
 # ===================================================================
 
 import streamlit as st
@@ -10,10 +10,8 @@ import io
 from datetime import datetime
 import re
 
-# ================= PAGE CONFIG =================
 st.set_page_config(page_title="GST Recon Pro", layout="wide")
 
-# ================= CUSTOM CSS =================
 st.markdown("""
 <style>
     .stApp { background: #f8fafc; }
@@ -23,27 +21,22 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# ================= SIDEBAR =================
 with st.sidebar:
     st.markdown("### ⚙️ Settings")
     tolerance = st.number_input("Match Tolerance (₹)", min_value=0, value=10, step=5)
 
-# ================= HEADER =================
 st.markdown("<h1>GST Recon Pro</h1>", unsafe_allow_html=True)
-st.markdown("Reconcile GSTR‑2B with Purchase Register – exact match logic")
+st.markdown("Reconcile GSTR‑2B with Purchase Register – exact match logic as per your sample files")
 
-# ================= SAMPLE FILE GENERATORS (exact copies of your uploaded files) =================
+# ================= SAMPLE FILE GENERATORS (EXACT COPIES) =================
 
 def generate_sample_2b():
-    """
-    Creates an Excel file identical to 'GSTR 2B Vs PR_.xlsx'
-    Sheets: 'Overall Summary', 'Document Details (Inv CDN)'
-    """
+    """Generates an Excel file IDENTICAL to your 'GSTR 2B Vs PR_.xlsx'"""
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        # ---------- Sheet: Overall Summary ----------
+        # ---------- Sheet: Overall Summary (exact structure) ----------
         summary_data = {
-            'Match Status': ['Exact', 'Manually linked', 'Manually Group linked', 'Suggested', 'Mismatch', 
+            'Match Status': ['Exact', 'Manually linked', 'Manually Group linked', 'Suggested', 'Mismatch',
                              'Missing in GSTR 2B(at Pan Level/GSTIN )', 'Missing in PR', 'Grand Total'],
             'Difference(2B-PR) Number of Documents': [0, 0, 0, 0, 0, 13, 113, 0],
             'Difference(2B-PR) Taxable Value': [0, 0, 0, 0, 0, 2482999, 6368117.76, 0],
@@ -58,8 +51,7 @@ def generate_sample_2b():
         summary_df = pd.DataFrame(summary_data)
         summary_df.to_excel(writer, sheet_name='Overall Summary', index=False)
 
-        # ---------- Sheet: Document Details (Inv CDN) ----------
-        # Full column list exactly as in your sample (74 columns)
+        # ---------- Sheet: Document Details (Inv CDN) – all 74 columns exactly as in your sample ----------
         detail_cols = [
             'Action Errors', 'Match Status', 'Match Status Description', 'Supplier Name',
             'Supplier GSTIN (2B)', 'Supplier GSTIN (PR)', 'My GSTIN (2B)', 'My GSTIN (PR)',
@@ -81,12 +73,13 @@ def generate_sample_2b():
             'Vendor Code', 'Financial Year', 'Voucher Number', 'Out of Range (2B)', 'Out of Range (PR)',
             'Claimable ITC - CGST', 'Claimable ITC - SGST', 'Claimable ITC - IGST', 'Claimable ITC - Cess'
         ]
-        # Build two sample rows as dictionaries with all columns (empty strings for unused)
-        def make_row(values_dict):
+
+        def make_row(values):
             row = {col: '' for col in detail_cols}
-            row.update(values_dict)
+            row.update(values)
             return row
-        
+
+        # Row 1: Missing in PR (credit note)
         row1 = make_row({
             'Action Errors': 'action_errors',
             'Match Status': 'Missing in PR',
@@ -116,7 +109,8 @@ def generate_sample_2b():
             'IRN generation date': '22-02-2024',
             'Financial Year': '2023-24',
         })
-        
+
+        # Row 2: Exact match (invoice)
         row2 = make_row({
             'Action Errors': 'action_errors',
             'Match Status': 'Exact',
@@ -165,7 +159,7 @@ def generate_sample_2b():
             'Claimable ITC - CGST': 675,
             'Claimable ITC - SGST': 675,
         })
-        
+
         detail_df = pd.DataFrame([row1, row2])
         detail_df.to_excel(writer, sheet_name='Document Details (Inv CDN)', index=False)
 
@@ -180,10 +174,7 @@ def generate_sample_2b():
     return output.getvalue()
 
 def generate_sample_books():
-    """
-    Creates an Excel file identical to 'Sample Books and 2B.xlsx'
-    Sheets: 'Purchase Invoice', 'Purchase Credit Debit Note', 'Summary', 'State Code Definition', 'Data Validation'
-    """
+    """Generates an Excel file IDENTICAL to your 'Sample Books and 2B.xlsx'"""
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         # ---------- Purchase Invoice ----------
@@ -218,8 +209,8 @@ def generate_sample_books():
         cdn_df = pd.DataFrame(cdn_data, columns=cdn_cols)
         cdn_df.to_excel(writer, sheet_name='Purchase Credit Debit Note', index=False)
 
-        # ---------- Summary (exact header structure as your sample) ----------
-        summary_data = [
+        # ---------- Summary (exact layout as your sample) ----------
+        summary_rows = [
             ['', '', '', '', '', '', '', '', '', ''],
             ['', '', '', '', '', '', '', '', '', ''],
             ['', 'Invoice Summary', '', '', '', '', '', '', '', ''],
@@ -236,10 +227,10 @@ def generate_sample_books():
             ['', 'Debit', 'B2C', '=SUMPRODUCT(...)', '=SUMIFS(...)', '=SUMIFS(...)', '=SUMIFS(...)', '=SUMIFS(...)', '=SUM(F14:H14)+...', '=I14+E14'],
             ['', 'Total', '', '=SUM(D11:D14)', '=SUM(E11:E14)', '=SUM(F11:F14)', '=SUM(G11:G14)', '=SUM(H11:H14)', '=SUM(I11:I14)', '=SUM(J11:J14)'],
         ]
-        summary_df = pd.DataFrame(summary_data)
+        summary_df = pd.DataFrame(summary_rows)
         summary_df.to_excel(writer, sheet_name='Summary', index=False, header=False)
 
-        # ---------- State Code Definition ----------
+        # ---------- State Code Definition (sample rows) ----------
         state_data = {
             'State': ['Telangana', 'Andhra Pradesh', 'Maharashtra'],
             'State Name': ['Telangana', 'Andhra Pradesh', 'Maharashtra'],
@@ -250,7 +241,7 @@ def generate_sample_books():
         state_df = pd.DataFrame(state_data)
         state_df.to_excel(writer, sheet_name='State Code Definition', index=False)
 
-        # ---------- Data Validation ----------
+        # ---------- Data Validation (sample rows) ----------
         dv_data = {
             'Item_Category': ['G', 'S', 'NA'],
             'Credit Debit': ['C', 'D', ''],
@@ -271,7 +262,7 @@ def generate_sample_books():
             worksheet.set_column('A:Z', 18)
     return output.getvalue()
 
-# ================= DOWNLOAD BUTTONS FOR SAMPLES =================
+# ================= DOWNLOAD BUTTONS =================
 col1, col2 = st.columns(2)
 with col1:
     st.download_button("📥 Download Sample GSTR‑2B (exact structure)", generate_sample_2b(),
@@ -286,7 +277,7 @@ st.markdown("---")
 def load_2b_data(file_bytes):
     """Reads the GSTR‑2B file (must contain sheet 'Document Details (Inv CDN)')"""
     df = pd.read_excel(io.BytesIO(file_bytes), sheet_name='Document Details (Inv CDN)')
-    # Map columns to standard names
+    # Map columns to standard names for matching
     rename_map = {
         'Supplier GSTIN (2B)': 'SUPPLIER GSTIN',
         'Document Number (2B)': 'DOCUMENT NUMBER',
@@ -308,7 +299,6 @@ def load_2b_data(file_bytes):
             df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
     if 'DOC_TYPE' not in df.columns:
         df['DOC_TYPE'] = df['TAXABLE VALUE'].apply(lambda x: 'CREDIT NOTE' if x < 0 else 'INVOICE')
-    # Normalize document number
     df['NORM_DOC'] = df['DOCUMENT NUMBER'].astype(str).str.upper().str.replace(r'[^A-Z0-9]', '', regex=True).str.lstrip('0')
     df['MATCH_KEY'] = df['SUPPLIER GSTIN'].astype(str).str.upper() + '|' + df['NORM_DOC'] + '|' + df['DOC_TYPE']
     df['TOTAL_TAX'] = df['IGST'] + df['CGST'] + df['SGST']
@@ -398,7 +388,7 @@ def run_reconciliation(file_2b, file_pr, tolerance):
     }).fillna('')
     
     # Build output detail dataframe
-    detail_cols = [
+    out_cols = [
         'Match Status', 'Match Status Description', 'SUPPLIER NAME (2B)',
         'SUPPLIER GSTIN (2B)', 'SUPPLIER GSTIN (PR)',
         'MY GSTIN (2B)', 'MY GSTIN (PR)',
@@ -412,7 +402,7 @@ def run_reconciliation(file_2b, file_pr, tolerance):
         'CGST (2B)', 'CGST (PR)',
         'SGST (2B)', 'SGST (PR)'
     ]
-    detail = merged[detail_cols].copy()
+    detail = merged[out_cols].copy()
     detail.columns = [
         'Match Status', 'Match Description', 'Supplier Name',
         'Supplier GSTIN (2B)', 'Supplier GSTIN (PR)',
@@ -429,7 +419,7 @@ def run_reconciliation(file_2b, file_pr, tolerance):
     ]
     return detail, df_2b, df_pr
 
-# ================= UPLOAD & PROCESS =================
+# ================= FILE UPLOAD & RECONCILIATION =================
 file_2b = st.file_uploader("📄 Upload GSTR‑2B Excel (must have sheet 'Document Details (Inv CDN)')", type=['xlsx', 'xls'])
 file_pr = st.file_uploader("📘 Upload Purchase Register (must have sheets 'Purchase Invoice' and 'Purchase Credit Debit Note')", type=['xlsx', 'xls'])
 
@@ -473,5 +463,4 @@ if file_2b and file_pr:
 else:
     st.info("👈 Upload both files to start reconciliation.")
 
-# ================= FOOTER =================
 st.markdown('<div class="footer">Developed by ABHISHEK JAKKULA | jakkulaabhishek5@gmail.com</div>', unsafe_allow_html=True)
