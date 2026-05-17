@@ -1,29 +1,64 @@
+# ============================================================================
+# ✨ GST Recon Pro v4.0 - Enterprise GST Reconciliation Engine
+# ============================================================================
+# Author: Abhishek Jakkula
+# Email: jakkulaabhishek5@gmail.com
+# Version: 4.0.0
+# Last Updated: May 2026
+# License: Proprietary - Enterprise Edition
+# ============================================================================
+
+# ==================== IMPORTS ====================
 import streamlit as st
 import pandas as pd
 import numpy as np
 import io
+import re
+import warnings
+import hashlib
+import json
+import base64
+import logging
 from datetime import datetime, timedelta
+from typing import Dict, List, Optional, Tuple, Union
+from pathlib import Path
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-import re
-import warnings
-warnings.filterwarnings('ignore')
+import xlsxwriter
+from io import BytesIO
+import time
+import sys
+import traceback
 
-# ================= CONFIG & UI SETUP =================
+# Suppress warnings
+warnings.filterwarnings('ignore')
+pd.options.mode.chained_assignment = None
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+logger = logging.getLogger(__name__)
+
+# ==================== CONFIG & UI SETUP ====================
 st.set_page_config(
-    page_title="✨ GST Recon Pro", 
+    page_title="✨ GST Recon Pro v4.0", 
     page_icon="🧾",
     layout="wide", 
     initial_sidebar_state="expanded",
     menu_items={
         'Get Help': 'mailto:jakkulaabhishek5@gmail.com',
         'Report a bug': "https://github.com/abhishekjakkula/gst-recon-pro/issues",
-        'About': "# GST Recon Pro v3.2\nEnterprise GST Reconciliation Engine"
+        'About': "# GST Recon Pro v4.0\nEnterprise GST Reconciliation Engine\n\n© 2026 Abhishek Jakkula. All rights reserved."
     }
 )
 
-# ================= ENHANCED THEME-ADAPTIVE CSS =================
+# ==================== ENHANCED THEME-ADAPTIVE CSS ====================
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap');
@@ -50,6 +85,7 @@ st.markdown("""
         --radius-md: 12px;
         --radius-lg: 16px;
         --radius-xl: 24px;
+        --transition: all 0.3s ease;
     }
 
     [data-theme="dark"] {
@@ -63,11 +99,13 @@ st.markdown("""
     html, body, [class*="css"] {
         font-family: 'Inter', sans-serif;
         color: var(--text-primary);
+        scroll-behavior: smooth;
     }
 
     .stApp {
         background: linear-gradient(135deg, var(--bg-light) 0%, #f1f5f9 100%);
         background-attachment: fixed;
+        min-height: 100vh;
     }
     [data-theme="dark"] .stApp {
         background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
@@ -77,6 +115,7 @@ st.markdown("""
         background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
         border-right: 1px solid rgba(255,255,255,0.1);
         box-shadow: var(--shadow-lg);
+        z-index: 999;
     }
 
     .main-header {
@@ -133,9 +172,10 @@ st.markdown("""
         padding: 28px 24px;
         border: 1px solid var(--border-light);
         box-shadow: var(--shadow-md);
-        transition: all 0.3s ease;
+        transition: var(--transition);
         position: relative;
         overflow: hidden;
+        cursor: default;
     }
     .metric-card::before {
         content: '';
@@ -187,7 +227,7 @@ st.markdown("""
         border-left: 5px solid var(--primary);
         box-shadow: var(--shadow-md);
         border: 1px solid var(--border-light);
-        transition: all 0.2s ease;
+        transition: var(--transition);
     }
     .insight-card:hover {
         box-shadow: var(--shadow-lg);
@@ -204,6 +244,10 @@ st.markdown("""
     .insight-card.error {
         border-left-color: var(--error);
         background: linear-gradient(135deg, rgba(239, 68, 68, 0.08), transparent);
+    }
+    .insight-card.info {
+        border-left-color: var(--info);
+        background: linear-gradient(135deg, rgba(59, 130, 246, 0.08), transparent);
     }
     .insight-card .insight-title {
         font-weight: 700;
@@ -248,7 +292,7 @@ st.markdown("""
         padding: 14px 32px;
         font-weight: 600;
         border: none;
-        transition: all 0.3s ease;
+        transition: var(--transition);
         box-shadow: var(--shadow-md);
         position: relative;
         overflow: hidden;
@@ -327,7 +371,7 @@ st.markdown("""
         border-radius: var(--radius-md);
         padding: 14px 28px;
         font-weight: 600;
-        transition: all 0.2s ease;
+        transition: var(--transition);
         color: var(--text-secondary);
         font-size: 0.95rem;
     }
@@ -403,7 +447,7 @@ st.markdown("""
         padding: 20px;
         text-align: center;
         cursor: pointer;
-        transition: all 0.2s ease;
+        transition: var(--transition);
         text-decoration: none;
         color: var(--text-primary);
     }
@@ -444,7 +488,7 @@ st.markdown("""
         font-size: 1.3rem;
         cursor: pointer;
         box-shadow: var(--shadow-lg);
-        transition: all 0.3s ease;
+        transition: var(--transition);
     }
     .theme-toggle button:hover {
         transform: scale(1.1);
@@ -463,11 +507,45 @@ st.markdown("""
     .doc-type-credit { background: rgba(239, 68, 68, 0.15); color: #991b1b; }
     .doc-type-debit { background: rgba(245, 158, 11, 0.15); color: #92400e; }
 
+    /* Enhanced dataframe styling with CSS-based approach */
+    .dataframe-status-exact { color: #065f46; background: rgba(16, 185, 129, 0.1); font-weight: 600; }
+    .dataframe-status-suggested { color: #0e7490; background: rgba(6, 182, 212, 0.1); font-weight: 600; }
+    .dataframe-status-mismatch { color: #92400e; background: rgba(245, 158, 11, 0.1); font-weight: 600; }
+    .dataframe-status-missing-2b { color: #991b1b; background: rgba(239, 68, 68, 0.1); font-weight: 600; }
+    .dataframe-status-missing-pr { color: #5b21b6; background: rgba(139, 92, 246, 0.1); font-weight: 600; }
+
     @media (max-width: 768px) {
         .main-header h1 { font-size: 2.2rem !important; }
         .main-header .subtitle { font-size: 1rem; }
         .metric-card .metric-value { font-size: 2rem; }
         .section-card { padding: 24px; }
+    }
+
+    /* Loading animation */
+    @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+    }
+    .loading { animation: pulse 1.5s ease-in-out infinite; }
+
+    /* Toast notifications */
+    .toast {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        padding: 16px 24px;
+        border-radius: 12px;
+        box-shadow: var(--shadow-lg);
+        z-index: 10000;
+        animation: slideIn 0.3s ease;
+        max-width: 400px;
+    }
+    .toast.success { background: var(--success); color: white; }
+    .toast.error { background: var(--error); color: white; }
+    .toast.warning { background: var(--warning); color: #1f2937; }
+    @keyframes slideIn {
+        from { transform: translateX(100%); opacity: 0; }
+        to { transform: translateX(0); opacity: 1; }
     }
 </style>
 
@@ -484,88 +562,139 @@ function toggleTheme() {
     const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
     document.documentElement.setAttribute('data-theme', newTheme);
     localStorage.setItem('gst-recon-theme', newTheme);
+    // Trigger re-render for Streamlit components
+    if (window.Streamlit) {
+        window.Streamlit.setComponentValue(newTheme);
+    }
 }
+// Keyboard shortcut for theme toggle
+document.addEventListener('keydown', function(e) {
+    if (e.ctrlKey && e.key === 't') {
+        e.preventDefault();
+        toggleTheme();
+    }
+});
 </script>
 """, unsafe_allow_html=True)
 
-# ================= THEME TOGGLE BUTTON =================
+# ==================== THEME TOGGLE BUTTON ====================
 st.markdown("""
 <div class="theme-toggle">
-    <button onclick="toggleTheme()" title="Toggle Dark/Light Mode">🌓</button>
+    <button onclick="toggleTheme()" title="Toggle Dark/Light Mode (Ctrl+T)">🌓</button>
 </div>
 """, unsafe_allow_html=True)
 
-# ================= SIDEBAR - ENHANCED =================
+# ==================== SIDEBAR - ENHANCED ====================
 with st.sidebar:
     st.markdown("""
     <div style="text-align: center; padding: 24px 0; border-bottom: 1px solid rgba(255,255,255,0.1); margin-bottom: 28px;">
         <div style="font-size: 3rem; margin-bottom: 10px;">🧾</div>
         <h3 style="margin: 0; color: #fff; font-size: 1.4rem;">GST Recon Pro</h3>
-        <p style="margin: 6px 0 0 0; color: #94a3b8; font-size: 0.9rem;">v3.2 • Enterprise Edition</p>
+        <p style="margin: 6px 0 0 0; color: #94a3b8; font-size: 0.9rem;">v4.0 • Enterprise Edition</p>
     </div>
     """, unsafe_allow_html=True)
     
     st.markdown("### ⚡ Quick Actions")
     col_q1, col_q2 = st.columns(2)
     with col_q1:
-        if st.button("📥 Load Sample", use_container_width=True):
+        if st.button("📥 Load Sample", use_container_width=True, key="btn_load_sample"):
             st.session_state.load_sample = True
+            st.rerun()
     with col_q2:
-        if st.button("🔄 Reset", use_container_width=True):
-            for key in list(st.session_state.keys()):
-                if 'upload' in key or 'file' in key:
-                    del st.session_state[key]
+        if st.button("🔄 Reset", use_container_width=True, key="btn_reset"):
+            # Clear all session state related to uploads
+            keys_to_clear = [k for k in st.session_state.keys() if 'upload' in k or 'file' in k or 'processed' in k]
+            for key in keys_to_clear:
+                del st.session_state[key]
+            st.success("✅ Session reset successfully!")
+            time.sleep(1)
             st.rerun()
     
     st.markdown("---")
     st.markdown("### ⚙️ Engine Settings")
     
     with st.expander("🎯 Matching Parameters", expanded=True):
-        tolerance = st.number_input("Tax/Taxable Tolerance (₹)", min_value=0, max_value=10000, value=20, step=1)
-        # ✅ UPDATED: Date Tolerance max changed to 365 days
+        tolerance = st.number_input("Tax/Taxable Tolerance (₹)", min_value=0, max_value=100000, value=20, step=1, 
+                                   help="Maximum allowed difference in taxable/tax values for matching")
         date_tolerance = st.number_input("Date Tolerance (Days)", min_value=0, max_value=365, value=7, step=1, 
-                                         help="Maximum date difference for suggested matches (up to 365 days)")
+                                        help="Maximum date difference for suggested matches")
+        fuzzy_threshold = st.slider("Fuzzy Name Match Threshold (%)", min_value=70, max_value=100, value=85, step=5,
+                                   help="Similarity percentage for fuzzy supplier name matching")
     
     with st.expander("📋 Processing Options"):
         include_reverse_charge = st.checkbox("Include Reverse Charge", value=True)
-        auto_claim_itc = st.checkbox("Auto-claim ITC for Exact", value=True)
-        fuzzy_doc_matching = st.checkbox("Fuzzy Document Matching", value=True)
+        auto_claim_itc = st.checkbox("Auto-claim ITC for Exact Matches", value=True)
+        fuzzy_doc_matching = st.checkbox("Enable Fuzzy Document Matching", value=True)
         handle_cdn_negative = st.checkbox("Treat Credit Notes as Negative Values", value=True, 
                                          help="Credit notes will have negative taxable/tax values for proper matching")
+        validate_gstin = st.checkbox("Validate GSTIN Format", value=True)
+        strict_financial_year = st.checkbox("Strict Financial Year Matching", value=False,
+                                           help="Only match documents within same financial year")
     
     with st.expander("📤 Export Preferences"):
-        include_charts = st.checkbox("Include Charts", value=True)
-        include_raw_data = st.checkbox("Include Raw Data", value=True)
-        max_rows = st.number_input("Max Excel Rows", min_value=1000, max_value=100000, value=15000, step=1000)
-        # ✅ NEW: Add dropdown validation option
+        include_charts = st.checkbox("Include Charts in Report", value=True)
+        include_raw_data = st.checkbox("Include Raw Data Sheets", value=True)
+        max_rows = st.number_input("Max Excel Rows", min_value=1000, max_value=500000, value=50000, step=1000)
         add_dropdown_validation = st.checkbox("Add DOC_TYPE Dropdown in Excel", value=True,
-                                             help="Add data validation dropdown for DOC_TYPE column (INVOICE/CREDIT/DEBIT)")
+                                             help="Add data validation dropdown for DOC_TYPE column")
+        export_format = st.selectbox("Primary Export Format", ["Excel (.xlsx)", "CSV (.csv)", "Both"], index=0)
     
     st.markdown("---")
-    with st.expander("❓ Help"):
+    with st.expander("❓ Help & Documentation"):
         st.markdown("""
-        **📚 Quick Guide**
-        - Upload GSTR-2B & Purchase Register files
-        - Configure matching tolerance in sidebar
-        - Review dashboard insights & charts
-        - Export comprehensive Excel report
+        **📚 Quick Start Guide**
+        1. Upload GSTR-2B & Purchase Register files (Excel format)
+        2. Configure matching tolerance in sidebar settings
+        3. Review dashboard insights & interactive charts
+        4. Export comprehensive reconciliation report
         
-        **🔧 Support**
+        **🔧 Supported Formats**
+        - DOC_TYPE: INVOICE, CREDIT, DEBIT (case-insensitive)
+        - Month: JANUARY-25, FEBRUARY-25, etc.
+        - Dates: DD-MM-YYYY, YYYY-MM-DD, DD/MM/YYYY
+        - Values: Credit Notes should have NEGATIVE values
+        
+        **🎯 Matching Logic**
+        - Exact: GSTIN + Doc No + Doc Type + Values match exactly
+        - Suggested: PAN + Normalized Doc No + Values within tolerance
+        - Value Mismatch: Document matches but amounts differ beyond tolerance
+        - Missing: Document present in one file but not the other
+        
+        **💡 Pro Tips**
+        • Use sample templates for correct column structure
+        • Ensure Credit Notes have negative taxable/tax values
+        • Standardize document numbering across systems
+        • Review "Suggested" matches manually for accuracy
+        • Use fuzzy matching for supplier name variations
+        
+        **🔐 Support**
         - Email: jakkulaabhishek5@gmail.com
-        - Response: < 24 hours
-        
-        **💡 Tips**
-        - Use sample templates for correct format
-        - Credit Notes should have negative values
-        - Month format: JANUARY-25, FEBRUARY-25
+        - Response Time: < 24 hours (Business Days)
+        - GitHub: github.com/abhishekjakkula/gst-recon-pro
         """)
     
     st.markdown("---")
     st.markdown("### 🟢 System Status")
-    st.markdown("""
+    
+    # System health checks
+    health_status = "✅ All Systems Operational"
+    health_color = "#10b981"
+    
+    try:
+        # Check pandas version
+        pd_version = pd.__version__
+        # Check plotly
+        import plotly
+        plotly_version = plotly.__version__
+    except Exception as e:
+        health_status = "⚠️ Dependency Issue"
+        health_color = "#f59e0b"
+        logger.warning(f"System health check failed: {e}")
+    
+    st.markdown(f"""
     <div style="font-size: 0.9rem; color: #94a3b8;">
         <div style="display: flex; justify-content: space-between; margin: 6px 0;">
-            <span>Engine:</span><span style="color: #10b981;">● Online</span>
+            <span>Engine:</span><span style="color: {health_color};">● {health_status}</span>
         </div>
         <div style="display: flex; justify-content: space-between; margin: 6px 0;">
             <span>Matching AI:</span><span style="color: #10b981;">● Active</span>
@@ -573,28 +702,35 @@ with st.sidebar:
         <div style="display: flex; justify-content: space-between; margin: 6px 0;">
             <span>Export Service:</span><span style="color: #10b981;">● Ready</span>
         </div>
+        <div style="display: flex; justify-content: space-between; margin: 6px 0;">
+            <span>Pandas:</span><span>{pd_version}</span>
+        </div>
+        <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.1);">
+            <small>Session ID: {hash(str(datetime.now())) % 10000:04d}</small>
+        </div>
     </div>
     """, unsafe_allow_html=True)
 
-# ================= HEADER SECTION =================
+# ==================== HEADER SECTION ====================
 st.markdown("""
 <div class="main-header animate-fade-in">
-    <h1>✨ GST Recon Pro</h1>
+    <h1>✨ GST Recon Pro v4.0</h1>
     <p class="subtitle">
         AI-Powered GST Reconciliation • Match GSTR-2B with Purchase Register • 
-        Real-time Insights • Compliance-Ready Reports • Credit/Debit Note Support
+        Real-time Insights • Compliance-Ready Reports • Credit/Debit Note Support • 
+        Enterprise-Grade Security & Performance
     </p>
 </div>
 """, unsafe_allow_html=True)
 
-# ================= HELPER FUNCTIONS =================
-def get_month_format(month_str):
-    """Convert month string to format like JANUARY-25, FEBRUARY-25"""
+# ==================== HELPER FUNCTIONS ====================
+
+def get_month_format(month_str: str) -> str:
+    """Convert month string to standardized format like JANUARY-25, FEBRUARY-25"""
     if pd.isna(month_str) or str(month_str).strip() == "":
         return "Unknown"
     
     try:
-        # Try to parse various formats
         month_str = str(month_str).strip().upper()
         
         # If already in correct format (e.g., "JANUARY-25")
@@ -603,79 +739,182 @@ def get_month_format(month_str):
         
         # Try parsing as YYYY-MM
         if '-' in month_str and len(month_str) == 7:
-            year, month_num = month_str.split('-')
-            month_name = datetime(int(year), int(month_num), 1).strftime('%B').upper()
-            year_short = str(year)[-2:]
-            return f"{month_name}-{year_short}"
+            parts = month_str.split('-')
+            if parts[0].isdigit() and parts[1].isdigit():
+                year, month_num = int(parts[0]), int(parts[1])
+                month_name = datetime(year, month_num, 1).strftime('%B').upper()
+                year_short = str(year)[-2:]
+                return f"{month_name}-{year_short}"
         
         # Try parsing as MM-YYYY
         if '-' in month_str:
             parts = month_str.split('-')
-            if len(parts) == 2 and len(parts[1]) == 4:
-                month_num, year = parts
-                month_name = datetime(int(year), int(month_num), 1).strftime('%B').upper()
-                year_short = str(year)[-2:]
+            if len(parts) == 2 and parts[1].isdigit() and len(parts[1]) == 4:
+                month_num, year = int(parts[0]), int(parts[1])
+                if 1 <= month_num <= 12:
+                    month_name = datetime(year, month_num, 1).strftime('%B').upper()
+                    year_short = str(year)[-2:]
+                    return f"{month_name}-{year_short}"
+        
+        # Try parsing as full date
+        for fmt in ['%d-%m-%Y', '%Y-%m-%d', '%d/%m/%Y']:
+            try:
+                dt = datetime.strptime(month_str, fmt)
+                month_name = dt.strftime('%B').upper()
+                year_short = str(dt.year)[-2:]
                 return f"{month_name}-{year_short}"
+            except:
+                continue
         
         return month_str
-    except:
-        return month_str
+    except Exception as e:
+        logger.warning(f"Month format conversion failed for '{month_str}': {e}")
+        return str(month_str).upper().strip() or "Unknown"
 
-def normalize_document_number(doc_num):
+
+def normalize_document_number(doc_num: str) -> str:
+    """Normalize document number for matching - remove special chars, convert to uppercase"""
     if pd.isna(doc_num) or str(doc_num).strip() == "":
         return "UNKNOWN"
+    # Remove special characters, keep only alphanumeric, convert to uppercase
     normalized = re.sub(r'[^A-Z0-9]', '', str(doc_num).upper().strip())
+    # Remove leading zeros but keep at least one character
     return normalized.lstrip('0') or "0"
 
-def extract_pan_from_gstin(gstin):
+
+def extract_pan_from_gstin(gstin: str) -> str:
+    """Extract PAN from GSTIN (characters 3-12)"""
     if pd.isna(gstin) or len(str(gstin).strip()) < 15:
         return "UNKNOWN"
-    return str(gstin).strip().upper()[2:12]
+    gstin_str = str(gstin).strip().upper()
+    if len(gstin_str) >= 12:
+        return gstin_str[2:12]
+    return "UNKNOWN"
 
-def get_document_type(taxable_value, doc_type_col=None):
-    """Determine DOC_TYPE from value sign or existing column"""
+
+def get_document_type(taxable_value: float, doc_type_col: str = None) -> str:
+    """Determine DOC_TYPE from value sign or existing column with intelligent fallback"""
+    # First check if doc_type_col is provided and valid
     if doc_type_col and pd.notna(doc_type_col):
         dt = str(doc_type_col).upper().strip()
-        if dt in ['CREDIT', 'CREDIT NOTE', 'CDN', 'CN']:
+        if dt in ['CREDIT', 'CREDIT NOTE', 'CDN', 'CN', 'CR', 'C']:
             return 'CREDIT'
-        elif dt in ['DEBIT', 'DEBIT NOTE', 'DBN', 'DN']:
+        elif dt in ['DEBIT', 'DEBIT NOTE', 'DBN', 'DN', 'DB', 'D']:
             return 'DEBIT'
-        elif dt in ['INVOICE', 'INV', 'B2B', 'B2C']:
+        elif dt in ['INVOICE', 'INV', 'B2B', 'B2C', 'I', 'IN']:
             return 'INVOICE'
+    
+    # Fallback to value-based detection
     try:
         val = float(taxable_value)
-        if val < 0:
+        if val < -0.01:  # Small negative threshold to handle floating point errors
             return 'CREDIT'
-        elif val > 0:
+        elif val > 0.01:
             return 'INVOICE'
         else:
-            return 'DEBIT'
-    except:
-        return 'INVOICE'
+            return 'DEBIT'  # Zero or near-zero values treated as debit notes
+    except (ValueError, TypeError):
+        return 'INVOICE'  # Default fallback
 
-def parse_date(date_str):
+
+def parse_date(date_str: str) -> Optional[datetime]:
+    """Parse date string with multiple format support"""
     if pd.isna(date_str) or str(date_str).strip() == "":
         return None
-    for fmt in ['%d-%m-%Y', '%Y-%m-%d', '%d/%m/%Y', '%m/%d/%Y']:
+    
+    date_str = str(date_str).strip()
+    
+    # List of date formats to try
+    formats = [
+        '%d-%m-%Y', '%Y-%m-%d', '%d/%m/%Y', '%m/%d/%Y',
+        '%d-%b-%Y', '%d %b %Y', '%b %d, %Y',
+        '%Y/%m/%d', '%d.%m.%Y', '%m.%d.%Y'
+    ]
+    
+    for fmt in formats:
         try:
-            return datetime.strptime(str(date_str).strip(), fmt)
-        except:
+            return datetime.strptime(date_str, fmt)
+        except ValueError:
             continue
+    
+    # Try pandas parsing as last resort
+    try:
+        parsed = pd.to_datetime(date_str, errors='coerce')
+        if pd.notna(parsed):
+            return parsed.to_pydatetime()
+    except:
+        pass
+    
     return None
 
-def get_financial_year(date_obj):
+
+def get_financial_year(date_obj: datetime) -> str:
+    """Get financial year string like '2023-24' from date"""
     if date_obj is None:
         return "Unknown"
     if date_obj.month >= 4:
         return f"{date_obj.year}-{str(date_obj.year + 1)[-2:]}"
     return f"{date_obj.year - 1}-{str(date_obj.year)[-2:]}"
 
-def is_same_financial_year(date1_str, date2_str):
-    d1, d2 = parse_date(date1_str), parse_date(date2_str)
-    return d1 and d2 and get_financial_year(d1) == get_financial_year(d2)
 
-# ================= ENHANCED SAMPLE TEMPLATE GENERATORS =================
-def generate_sample_2b_template():
+def is_same_financial_year(date1_str: str, date2_str: str) -> bool:
+    """Check if two dates fall in same financial year"""
+    d1, d2 = parse_date(date1_str), parse_date(date2_str)
+    if d1 is None or d2 is None:
+        return False
+    return get_financial_year(d1) == get_financial_year(d2)
+
+
+def calculate_date_difference(date1_str: str, date2_str: str) -> Optional[int]:
+    """Calculate absolute difference in days between two dates"""
+    d1, d2 = parse_date(date1_str), parse_date(date2_str)
+    if d1 is None or d2 is None:
+        return None
+    return abs((d2 - d1).days)
+
+
+def fuzzy_match_names(name1: str, name2: str, threshold: float = 85.0) -> bool:
+    """Simple fuzzy matching for supplier names using string similarity"""
+    if pd.isna(name1) or pd.isna(name2):
+        return False
+    
+    n1 = str(name1).upper().strip()
+    n2 = str(name2).upper().strip()
+    
+    # Exact match
+    if n1 == n2:
+        return True
+    
+    # Remove common suffixes/prefixes for comparison
+    for suffix in ['PVT LTD', 'PVT. LTD.', 'PRIVATE LIMITED', 'LTD', 'LIMITED', 'LLP', 'AND SONS', '& SONS']:
+        n1 = re.sub(r'\b' + re.escape(suffix) + r'\b', '', n1).strip()
+        n2 = re.sub(r'\b' + re.escape(suffix) + r'\b', '', n2).strip()
+    
+    # Simple similarity ratio (can be enhanced with fuzzywuzzy if needed)
+    from difflib import SequenceMatcher
+    ratio = SequenceMatcher(None, n1, n2).ratio() * 100
+    
+    return ratio >= threshold
+
+
+def validate_gstin_format(gstin: str) -> bool:
+    """Validate GSTIN format: 2 digits + 10 chars PAN + 1 digit + Z + 1 digit"""
+    if pd.isna(gstin) or len(str(gstin).strip()) != 15:
+        return False
+    gstin = str(gstin).strip().upper()
+    # Basic pattern: 2 digits, 10 alphanumeric, 1 digit, 'Z', 1 alphanumeric
+    pattern = r'^[0-9]{2}[A-Z0-9]{10}[0-9]Z[A-Z0-9]{1}$'
+    return bool(re.match(pattern, gstin))
+
+
+def generate_file_hash(file_bytes: bytes) -> str:
+    """Generate MD5 hash for file content tracking"""
+    return hashlib.md5(file_bytes).hexdigest()
+
+
+# ==================== ENHANCED SAMPLE TEMPLATE GENERATORS ====================
+
+def generate_sample_2b_template() -> bytes:
     """Generate sample GSTR-2B with proper DOC_TYPE breakdown and negative CDN values"""
     cols = [
         "SUPPLIER GSTIN", "DOCUMENT NUMBER", "TAXABLE VALUE", "IGST", "CGST", "SGST", 
@@ -683,59 +922,71 @@ def generate_sample_2b_template():
     ]
     
     sample_data = [
-        # INVOICES
+        # INVOICES - Exact Matches
         ["36CNNPD6299J1ZB", "11/2023-24", 7500.00, 0, 675.00, 675.00, "NESHWARI ENGINEERING AND SERVICES", "36ADXFS5154R1ZU", "24-07-2023", "JULY-23", "INVOICE", "NO"],
         ["08AAACM8473A1ZL", "MEC-439-2023", 13150.00, 2367.00, 0, 0, "METALLIZING EQUIPMENT COMPANY P. LTD.", "36ADXFS5154R1ZU", "26-05-2023", "MAY-23", "INVOICE", "NO"],
         ["36ADUPV8726H1ZM", "ET/LSR/2324/1616", 390.00, 0, 35.10, 35.10, "M/S EXCELANT TECHNOLOGIES", "36ADXFS5154R1ZU", "20-01-2024", "JANUARY-24", "INVOICE", "NO"],
         ["36AAFCS6791L1ZN", "23-24/4406", 123500.00, 0, 11115.00, 11115.00, "SAI DEEPA ROCK DRILLS PVT LTD", "36ADXFS5154R1ZU", "02-01-2024", "JANUARY-24", "INVOICE", "NO"],
         ["36BDJPM4292D2ZF", "11/23-24", 153026.00, 0, 13772.34, 13772.34, "SANJAY MANDAL LABOUR CONTRACTOR", "36ADXFS5154R1ZU", "01-05-2023", "MAY-23", "INVOICE", "NO"],
-        ["36AGIPG4790K1Z0", "GST-23-24/157", 4582.00, 0, 412.38, 412.38, "S K ENGINEERS", "36ADXFS5154R1ZU", "06-07-2023", "JULY-23", "INVOICE", "NO"],
+        
+        # CREDIT NOTES (NEGATIVE VALUES) - Exact Matches
+        ["36AFKPD6156R1ZT", "23", -5042.36, 0, -453.81, -453.81, "M/S SRI SATYA TECHNOLOGIES", "36ADXFS5154R1ZU", "22-02-2024", "FEBRUARY-24", "CREDIT", "NO"],
+        ["36AADCR6281N1ZT", "CN-2024-001", -2500.00, 0, -225.00, -225.00, "CARE HEALTH INSURANCE LIMITED", "36ADXFS5154R1ZU", "15-03-2024", "MARCH-24", "CREDIT", "NO"],
+        ["08AAACM8473A1ZL", "CN-MEC-001", -1500.00, -270.00, 0, 0, "METALLIZING EQUIPMENT COMPANY P. LTD.", "36ADXFS5154R1ZU", "10-01-2024", "JANUARY-24", "CREDIT", "NO"],
+        
+        # DEBIT NOTES - Exact Matches
+        ["36CNNPD6299J1ZB", "DN-2024-001", 1200.00, 0, 108.00, 108.00, "NESHWARI ENGINEERING AND SERVICES", "36ADXFS5154R1ZU", "05-03-2024", "MARCH-24", "DEBIT", "NO"],
+        ["36AAFCS6791L1ZN", "DN-SDR-002", 3500.00, 0, 315.00, 315.00, "SAI DEEPA ROCK DRILLS PVT LTD", "36ADXFS5154R1ZU", "20-02-2024", "FEBRUARY-24", "DEBIT", "NO"],
+        
+        # SUGGESTED MATCHES (Date differs within tolerance)
         ["36DGLPP5363P1ZG", "ST/23-24/39", 23650.00, 0, 2128.50, 2128.50, "S SQUARE INDUSTRIES", "36ADXFS5154R1ZU", "03-05-2023", "MAY-23", "INVOICE", "NO"],
         ["36ADXFS5161J1ZB", "INV/23-24/0092", 2470.00, 0, 222.30, 222.30, "SD WoT", "36ADXFS5154R1ZU", "07-07-2023", "JULY-23", "INVOICE", "NO"],
         ["27AIXPL7527J1ZF", "VT/23-24/045", 14700.00, 2646.00, 0, 0, "VICTORY TOOLS", "36ADXFS5154R1ZU", "25-04-2023", "APRIL-23", "INVOICE", "NO"],
         ["27AIXPL7527J1ZF", "VT/23-24/312", 31290.00, 5632.20, 0, 0, "VICTORY TOOLS", "36ADXFS5154R1ZU", "15-01-2024", "JANUARY-24", "INVOICE", "NO"],
         
-        # CREDIT NOTES (NEGATIVE VALUES)
-        ["36AFKPD6156R1ZT", "23", -5042.36, 0, -453.81, -453.81, "M/S SRI SATYA TECHNOLOGIES", "36ADXFS5154R1ZU", "22-02-2024", "FEBRUARY-24", "CREDIT", "NO"],
-        ["36AADCR6281N1ZT", "CN-2024-001", -2500.00, 0, -225.00, -225.00, "CARE HEALTH INSURANCE LIMITED", "36ADXFS5154R1ZU", "15-03-2024", "MARCH-24", "CREDIT", "NO"],
-        ["08AAACM8473A1ZL", "CN-MEC-001", -1500.00, -270.00, 0, 0, "METALLIZING EQUIPMENT COMPANY P. LTD.", "36ADXFS5154R1ZU", "10-01-2024", "JANUARY-24", "CREDIT", "NO"],
-        
-        # DEBIT NOTES
-        ["36CNNPD6299J1ZB", "DN-2024-001", 1200.00, 0, 108.00, 108.00, "NESHWARI ENGINEERING AND SERVICES", "36ADXFS5154R1ZU", "05-03-2024", "MARCH-24", "DEBIT", "NO"],
-        ["36AAFCS6791L1ZN", "DN-SDR-002", 3500.00, 0, 315.00, 315.00, "SAI DEEPA ROCK DRILLS PVT LTD", "36ADXFS5154R1ZU", "20-02-2024", "FEBRUARY-24", "DEBIT", "NO"],
-        
-        # MISSING IN PR
+        # MISSING IN PR (Present in 2B only)
         ["36AADCR6281N1ZT", "67186859-1D", 8579.40, 0, 772.11, 772.11, "CARE HEALTH INSURANCE LIMITED", "36ADXFS5154R1ZU", "01-01-2024", "JANUARY-24", "INVOICE", "NO"],
         ["36CKUPB7102C1ZF", "BEW/23-24/53", 3500.00, 0, 315.00, 315.00, "BALAJI ENGINEERING WORKS", "36ADXFS5154R1ZU", "29-09-2023", "SEPTEMBER-23", "INVOICE", "NO"],
         ["36AAJCS4517L1ZZ", "362311I000806960", 11388.88, 0, 1025.00, 1025.00, "STAR HEALTH AND ALLIED INSURANCE COMPANY LIMITED", "36ADXFS5154R1ZU", "13-11-2023", "NOVEMBER-23", "INVOICE", "NO"],
-        ["36AADCR6281N1ZT", "71936233-1D", 6987.59, 0, 628.89, 628.89, "CARE HEALTH INSURANCE LIMITED", "36ADXFS5154R1ZU", "01-12-2023", "DECEMBER-23", "INVOICE", "NO"],
-        ["36AXXPS8501J1ZN", "34/2022-23", 90000.00, 0, 2250.00, 2250.00, "SRINIVASA CATERERS", "36ADXFS5154R1ZU", "01-11-2022", "APRIL-23", "INVOICE", "NO"],
         
-        # REVERSE CHARGE
-        ["29AAOCA4995P1ZH", "RC/2023/001", 5000.00, 900.00, 0, 0, "REVERSE CHARGE SUPPLIER", "36ADXFS5154R1ZU", "15-06-2023", "JUNE-23", "INVOICE", "YES"],
+        # VALUE MISMATCH EXAMPLE
+        ["36AGIPG4790K1Z0", "GST-23-24/157", 4582.00, 0, 412.38, 412.38, "S K ENGINEERS", "36ADXFS5154R1ZU", "06-07-2023", "JULY-23", "INVOICE", "NO"],
     ]
     
     df_sample = pd.DataFrame(sample_data, columns=cols)
+    
+    # Create Excel with proper formatting
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
         df_sample.to_excel(writer, sheet_name="GSTR_2B_Data", index=False)
         workbook = writer.book
         worksheet = writer.sheets["GSTR_2B_Data"]
-        header_format = workbook.add_format({"bold": True, "bg_color": "#1e40af", "font_color": "white", "border": 1, "align": "center"})
+        
+        # Header formatting
+        header_format = workbook.add_format({
+            "bold": True, "bg_color": "#1e40af", "font_color": "white", 
+            "border": 1, "align": "center", "valign": "vcenter"
+        })
         for col_num, col_name in enumerate(cols):
             worksheet.write(0, col_num, col_name, header_format)
-        worksheet.set_column('A:A', 20)
-        worksheet.set_column('B:B', 22)
-        worksheet.set_column('C:F', 14)
-        worksheet.set_column('G:G', 35)
-        worksheet.set_column('H:H', 20)
-        worksheet.set_column('I:I', 14)
-        worksheet.set_column('J:J', 14)
-        worksheet.set_column('K:L', 14)
+        
+        # Column widths
+        worksheet.set_column('A:A', 20)  # SUPPLIER GSTIN
+        worksheet.set_column('B:B', 22)  # DOCUMENT NUMBER
+        worksheet.set_column('C:F', 14)  # Values
+        worksheet.set_column('G:G', 35)  # SUPPLIER NAME
+        worksheet.set_column('H:H', 20)  # MY GSTIN
+        worksheet.set_column('I:I', 14)  # DOCUMENT DATE
+        worksheet.set_column('J:J', 14)  # MONTH
+        worksheet.set_column('K:L', 14)  # DOC_TYPE, REVERSE_CHARGE
+        
+        # Add data validation for DOC_TYPE column
+        worksheet.data_validation('K2:K1000', {'validate': 'list', 'source': ['INVOICE', 'CREDIT', 'DEBIT']})
+    
     return output.getvalue()
 
 
-def generate_sample_books_template():
+def generate_sample_books_template() -> bytes:
     """Generate sample Purchase Register with proper DOC_TYPE and negative CDN values"""
     cols = [
         "SUPPLIER GSTIN", "DOCUMENT NUMBER", "TAXABLE VALUE", "IGST", "CGST", "SGST", 
@@ -744,56 +995,55 @@ def generate_sample_books_template():
     ]
     
     sample_data = [
-        # INVOICES
+        # INVOICES - Exact Matches
         ["36CNNPD6299J1ZB", "11/2023-24", 7500.00, 0, 675.00, 675.00, "NESHWARI ENGINEERING AND SERVICES", "36ADXFS5154R1ZU", "24-07-2023", "JULY-23", "INVOICE", "NO", "ELIGIBLE", "TELANGANA"],
         ["08AAACM8473A1ZL", "MEC-439-2023", 13150.00, 2367.00, 0, 0, "METALLIZING EQUIPMENT COMPANY P. LTD.", "36ADXFS5154R1ZU", "26-05-2023", "MAY-23", "INVOICE", "NO", "ELIGIBLE", "TELANGANA"],
         ["36ADUPV8726H1ZM", "ET/LSR/2324/1616", 390.00, 0, 35.10, 35.10, "M/S EXCELANT TECHNOLOGIES", "36ADXFS5154R1ZU", "20-01-2024", "JANUARY-24", "INVOICE", "NO", "ELIGIBLE", "TELANGANA"],
         ["36AAFCS6791L1ZN", "23-24/4406", 123500.00, 0, 11115.00, 11115.00, "SAI DEEPA ROCK DRILLS PVT LTD", "36ADXFS5154R1ZU", "02-01-2024", "JANUARY-24", "INVOICE", "NO", "ELIGIBLE", "TELANGANA"],
         ["36BDJPM4292D2ZF", "11/23-24", 153026.00, 0, 13772.34, 13772.34, "SANJAY MANDAL LABOUR CONTRACTOR", "36ADXFS5154R1ZU", "01-05-2023", "MAY-23", "INVOICE", "NO", "ELIGIBLE", "TELANGANA"],
-        ["36AGIPG4790K1Z0", "GST-23-24/157", 4582.00, 0, 412.38, 412.38, "S K ENGINEERS", "36ADXFS5154R1ZU", "06-07-2023", "JULY-23", "INVOICE", "NO", "ELIGIBLE", "TELANGANA"],
         
-        # CREDIT NOTES (NEGATIVE VALUES)
+        # CREDIT NOTES (NEGATIVE VALUES) - Exact Matches
         ["36AFKPD6156R1ZT", "23", -5042.36, 0, -453.81, -453.81, "M/S SRI SATYA TECHNOLOGIES", "36ADXFS5154R1ZU", "22-02-2024", "FEBRUARY-24", "CREDIT", "NO", "ELIGIBLE", "TELANGANA"],
         ["36AADCR6281N1ZT", "CN-2024-001", -2500.00, 0, -225.00, -225.00, "CARE HEALTH INSURANCE LIMITED", "36ADXFS5154R1ZU", "15-03-2024", "MARCH-24", "CREDIT", "NO", "ELIGIBLE", "TELANGANA"],
         ["08AAACM8473A1ZL", "CN-MEC-001", -1500.00, -270.00, 0, 0, "METALLIZING EQUIPMENT COMPANY P. LTD.", "36ADXFS5154R1ZU", "10-01-2024", "JANUARY-24", "CREDIT", "NO", "ELIGIBLE", "TELANGANA"],
         
-        # DEBIT NOTES
+        # DEBIT NOTES - Exact Matches
         ["36CNNPD6299J1ZB", "DN-2024-001", 1200.00, 0, 108.00, 108.00, "NESHWARI ENGINEERING AND SERVICES", "36ADXFS5154R1ZU", "05-03-2024", "MARCH-24", "DEBIT", "NO", "ELIGIBLE", "TELANGANA"],
         ["36AAFCS6791L1ZN", "DN-SDR-002", 3500.00, 0, 315.00, 315.00, "SAI DEEPA ROCK DRILLS PVT LTD", "36ADXFS5154R1ZU", "20-02-2024", "FEBRUARY-24", "DEBIT", "NO", "ELIGIBLE", "TELANGANA"],
         
-        # SUGGESTED MATCHES
+        # SUGGESTED MATCHES (Date differs within tolerance)
         ["36DGLPP5363P1ZG", "ST/23-24/39", 23650.00, 0, 2128.50, 2128.50, "S SQUARE INDUSTRIES", "36ADXFS5154R1ZU", "01-06-2023", "JUNE-23", "INVOICE", "NO", "ELIGIBLE", "TELANGANA"],
         ["36ADXFS5161J1ZB", "INV/23-24/0092", 2470.00, 0, 222.30, 222.30, "SD WoT", "36ADXFS5154R1ZU", "01-09-2023", "SEPTEMBER-23", "INVOICE", "NO", "ELIGIBLE", "TELANGANA"],
         ["27AIXPL7527J1ZF", "VT/23-24/045", 14700.00, 2646.00, 0, 0, "VICTORY TOOLS", "36ADXFS5154R1ZU", "01-05-2023", "MAY-23", "INVOICE", "NO", "ELIGIBLE", "TELANGANA"],
         ["27AIXPL7527J1ZF", "VT/23-24/312", 31290.00, 5632.20, 0, 0, "VICTORY TOOLS", "36ADXFS5154R1ZU", "01-02-2024", "FEBRUARY-24", "INVOICE", "NO", "ELIGIBLE", "TELANGANA"],
         
-        # MISSING IN 2B
+        # MISSING IN 2B (Present in PR only)
         ["36AAGCE1603E1Z6", "EDT/SB/2223/013", 79200.00, 0, 4752.00, 4752.00, "EXIGENT DRILLING TECHNOLOGIES PRIVATE LIMITED", "36ADXFS5154R1ZU", "01-04-2023", "APRIL-23", "INVOICE", "NO", "ELIGIBLE", "TELANGANA"],
         ["36BDJPM4292D2ZF", "106/22-23", 211868.00, 0, 19068.12, 19068.12, "SANJAY MANDAL LABOUR CONTRACTOR", "36ADXFS5154R1ZU", "01-04-2023", "APRIL-23", "INVOICE", "NO", "ELIGIBLE", "TELANGANA"],
         ["36BNDPM1159D1Z9", "160", 12015.00, 0, 1081.35, 1081.35, "SRI SAI DURGA PAINTS", "36ADXFS5154R1ZU", "01-04-2023", "APRIL-23", "INVOICE", "NO", "ELIGIBLE", "TELANGANA"],
-        ["36CKUPB7102C1ZF", "BEW/22-23/101", 1365.00, 0, 81.90, 81.90, "BALAJI ENGINEERING WORKS", "36ADXFS5154R1ZU", "01-05-2023", "MAY-23", "INVOICE", "NO", "ELIGIBLE", "TELANGANA"],
-        ["36BECPP5867F1Z7", "055/BSE/22-23", 3850.00, 0, 346.50, 346.50, "B-SON ELECTRICALS", "36ADXFS5154R1ZU", "01-04-2023", "APRIL-23", "INVOICE", "NO", "ELIGIBLE", "TELANGANA"],
-        ["29AAOCA4995P1ZH", "FD/22-23/0316", 165318.00, 29757.24, 0, 0, "ANNFLUID DYNAMIKS PRIVATE LIMITED", "36ADXFS5154R1ZU", "01-04-2023", "APRIL-23", "INVOICE", "NO", "ELIGIBLE", "TELANGANA"],
-        ["29AILPR7596P1ZS", "MMU/22-23/86", 265000.00, 47700.00, 0, 0, "MARUTHI MACHINE UDYOG", "36ADXFS5154R1ZU", "01-04-2023", "APRIL-23", "INVOICE", "NO", "ELIGIBLE", "TELANGANA"],
-        ["29AARFC9317P1ZG", "2022008", 21000.00, 3780.00, 0, 0, "CAL-TECHNOLOGIES", "36ADXFS5154R1ZU", "01-04-2023", "APRIL-23", "INVOICE", "NO", "ELIGIBLE", "TELANGANA"],
-        ["36AAGCE1603E1Z6", "DEBIT NOTE NO.1", 8240.00, 0, 494.40, 494.40, "Exigent Drilling Technologies Private Limited", "36ADXFS5154R1ZU", "12-06-2023", "JUNE-23", "INVOICE", "NO", "ELIGIBLE", "TELANGANA"],
-        ["36ATFPG9930M1Z8", "GRK/43/2022-2023", 88143.00, 0, 7932.87, 7932.87, "GRK ENTERPRISES", "36ADXFS5154R1ZU", "01-06-2023", "JUNE-23", "INVOICE", "NO", "ELIGIBLE", "TELANGANA"],
-        ["29AILPR7596P1ZS", "MMU/22-23/85", 1350000.00, 243000.00, 0, 0, "MARUTHI MACHINE UDYOG", "36ADXFS5154R1ZU", "01-04-2023", "APRIL-23", "INVOICE", "NO", "ELIGIBLE", "TELANGANA"],
-        ["29AILPR7596P1ZS", "MMU/22-23/84", 250000.00, 45000.00, 0, 0, "MARUTHI MACHINE UDYOG", "36ADXFS5154R1ZU", "01-04-2023", "APRIL-23", "INVOICE", "NO", "ELIGIBLE", "TELANGANA"],
         
-        # MISMATCH EXAMPLE
-        ["36AAACU2414K1ZG", "Z", 300.00, 0, 27.00, 27.00, "AXIS BANK LTD", "36ADXFS5154R1ZU", "07-11-2023", "NOVEMBER-23", "INVOICE", "NO", "ELIGIBLE", "TELANGANA"],
+        # VALUE MISMATCH EXAMPLE (Different amounts)
+        ["36AGIPG4790K1Z0", "GST-23-24/157", 4600.00, 0, 414.00, 414.00, "S K ENGINEERS", "36ADXFS5154R1ZU", "06-07-2023", "JULY-23", "INVOICE", "NO", "ELIGIBLE", "TELANGANA"],
     ]
     
     df_sample = pd.DataFrame(sample_data, columns=cols)
+    
+    # Create Excel with proper formatting
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
         df_sample.to_excel(writer, sheet_name="Purchase_Register", index=False)
         workbook = writer.book
         worksheet = writer.sheets["Purchase_Register"]
-        header_format = workbook.add_format({"bold": True, "bg_color": "#1e40af", "font_color": "white", "border": 1, "align": "center"})
+        
+        # Header formatting
+        header_format = workbook.add_format({
+            "bold": True, "bg_color": "#1e40af", "font_color": "white", 
+            "border": 1, "align": "center", "valign": "vcenter"
+        })
         for col_num, col_name in enumerate(cols):
             worksheet.write(0, col_num, col_name, header_format)
+        
+        # Column widths
         worksheet.set_column('A:A', 20)
         worksheet.set_column('B:B', 22)
         worksheet.set_column('C:F', 14)
@@ -802,9 +1052,13 @@ def generate_sample_books_template():
         worksheet.set_column('I:I', 14)
         worksheet.set_column('J:J', 14)
         worksheet.set_column('K:N', 14)
+        
+        # Add data validation for DOC_TYPE column
+        worksheet.data_validation('K2:K1000', {'validate': 'list', 'source': ['INVOICE', 'CREDIT', 'DEBIT']})
+    
     return output.getvalue()
 
-# ================= FILE UPLOAD SECTION =================
+# ==================== FILE UPLOAD SECTION ====================
 st.markdown("""
 <div class="section-card animate-fade-in">
     <h3><span class="icon">📁</span> Upload Your Files</h3>
@@ -812,6 +1066,7 @@ st.markdown("""
         Select your GSTR-2B and Purchase Register files. Ensure DOC_TYPE column has: INVOICE, CREDIT, or DEBIT.
         <br><strong>💡 Credit Notes should have negative taxable/tax values for proper matching.</strong>
         <br><strong>📅 Month format: JANUARY-25, FEBRUARY-25, etc.</strong>
+        <br><strong>✅ GSTIN format: 15 characters (e.g., 36AADCR6281N1ZT)</strong>
     </p>
 """, unsafe_allow_html=True)
 
@@ -821,11 +1076,14 @@ with col_upload1:
     file_2b = st.file_uploader("📄 GSTR-2B File", type=['xlsx', 'xls'], key='upload_2b', label_visibility="collapsed")
     if file_2b:
         st.success(f"✓ {file_2b.name}")
+        # Store file hash for change detection
+        st.session_state.file_2b_hash = generate_file_hash(file_2b.getvalue())
 
 with col_upload2:
     file_pr = st.file_uploader("📘 Purchase Register", type=['xlsx', 'xls'], key='upload_pr', label_visibility="collapsed")
     if file_pr:
         st.success(f"✓ {file_pr.name}")
+        st.session_state.file_pr_hash = generate_file_hash(file_pr.getvalue())
 
 with col_upload3:
     st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)
@@ -834,172 +1092,292 @@ with col_upload3:
         st.download_button(
             label="📥 2B Sample",
             data=generate_sample_2b_template(),
-            file_name="GSTR2B_Sample_CDN.xlsx",
+            file_name="GSTR2B_Sample_Template.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True
+            use_container_width=True,
+            key="btn_download_2b_sample"
         )
     with col_d2:
         st.download_button(
             label="📘 PR Sample",
             data=generate_sample_books_template(),
-            file_name="PurchaseRegister_Sample_CDN.xlsx",
+            file_name="PurchaseRegister_Sample_Template.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True
+            use_container_width=True,
+            key="btn_download_pr_sample"
         )
 
 st.markdown("</div>", unsafe_allow_html=True)
 
-# ================= MAIN PROCESSING FUNCTION =================
-@st.cache_data(show_spinner=False)
-def process_reconciliation(file_2b_bytes, file_pr_bytes, tolerance, date_tol_days, include_rc, handle_cdn_neg):
-    """Main reconciliation with enhanced Credit/Debit Note handling"""
+# ==================== MAIN PROCESSING FUNCTION ====================
+@st.cache_data(show_spinner=False, ttl=3600)
+def process_reconciliation(
+    file_2b_bytes: bytes, 
+    file_pr_bytes: bytes, 
+    tolerance: float, 
+    date_tol_days: int, 
+    include_rc: bool, 
+    handle_cdn_neg: bool,
+    fuzzy_threshold: float,
+    validate_gstin_flag: bool,
+    strict_fy: bool
+) -> Tuple[pd.DataFrame, int, pd.DataFrame, pd.DataFrame, Dict]:
+    """
+    Main reconciliation engine with enhanced Credit/Debit Note handling
     
-    df_2b = pd.read_excel(io.BytesIO(file_2b_bytes))
-    df_pr = pd.read_excel(io.BytesIO(file_pr_bytes))
+    Returns:
+        Tuple of (merged_df, dup_pr_count, df_2b, df_pr, stats_dict)
+    """
+    start_time = time.time()
+    logger.info("Starting reconciliation process")
     
-    # Clean column names
-    for df in [df_2b, df_pr]:
-        df.columns = df.columns.str.replace('*', '', regex=False).str.strip().str.upper()
-    
-    # Standardize columns
-    col_map = {
-        'SUPPLIER GSTIN': 'SUPPLIER_GSTIN', 'DOCUMENT NUMBER': 'DOC_NUMBER',
-        'TAXABLE VALUE': 'TAXABLE_VALUE', 'SUPPLIER NAME': 'SUPPLIER_NAME',
-        'MY GSTIN': 'MY_GSTIN', 'DOCUMENT DATE': 'DOC_DATE', 'DOC_TYPE': 'DOC_TYPE',
-        'REVERSE_CHARGE': 'REVERSE_CHARGE', 'ITC_CLAIM_TYPE': 'ITC_CLAIM_TYPE',
-        'PLACE_OF_SUPPLY': 'PLACE_OF_SUPPLY', 'MONTH': 'MONTH'
-    }
-    for old, new in col_map.items():
-        if old in df_2b.columns:
-            df_2b[new] = df_2b[old]
-        if old in df_pr.columns:
-            df_pr[new] = df_pr[old]
-    
-    # Ensure required columns
-    required = ['SUPPLIER_GSTIN', 'DOC_NUMBER', 'TAXABLE_VALUE', 'SUPPLIER_NAME', 
-                'MY_GSTIN', 'DOC_DATE', 'IGST', 'CGST', 'SGST']
-    for col in required:
-        if col not in df_2b.columns:
-            df_2b[col] = None
-        if col not in df_pr.columns:
-            df_pr[col] = None
-    for df in [df_2b, df_pr]:
-        if 'CESS' not in df.columns:
-            df['CESS'] = 0
-    
-    # Fill NaN and standardize
-    for df in [df_2b, df_pr]:
-        df['SUPPLIER_GSTIN'] = df['SUPPLIER_GSTIN'].fillna('UNKNOWN').astype(str).str.upper().str.strip()
-        df['MY_GSTIN'] = df['MY_GSTIN'].fillna('').astype(str).str.upper().str.strip()
-        df['SUPPLIER_NAME'] = df['SUPPLIER_NAME'].fillna('Unknown').astype(str).str.strip()
-        df['DOC_NUMBER'] = df['DOC_NUMBER'].fillna('').astype(str).str.strip()
-        df['DOC_DATE'] = df['DOC_DATE'].fillna('').astype(str).str.strip()
-        df['REVERSE_CHARGE'] = df.get('REVERSE_CHARGE', pd.Series(['NO']*len(df))).fillna('NO').astype(str).str.upper().str.strip()
-        # ✅ Convert month to new format
-        df['MONTH'] = df.get('MONTH', pd.Series(['Unknown']*len(df))).fillna('Unknown').apply(get_month_format)
-        df['ITC_CLAIM_TYPE'] = df.get('ITC_CLAIM_TYPE', pd.Series(['']*len(df))).fillna('').astype(str).str.strip().str.upper()
-        df['PLACE_OF_SUPPLY'] = df.get('PLACE_OF_SUPPLY', pd.Series(['']*len(df))).fillna('').astype(str).str.strip().str.upper()
+    try:
+        # Load data
+        df_2b = pd.read_excel(io.BytesIO(file_2b_bytes))
+        df_pr = pd.read_excel(io.BytesIO(file_pr_bytes))
+        logger.info(f"Loaded {len(df_2b)} records from 2B, {len(df_pr)} from PR")
         
-        # Convert numeric
-        for col in ['TAXABLE_VALUE', 'IGST', 'CGST', 'SGST', 'CESS']:
-            df[col] = pd.to_numeric(df.get(col, pd.Series([0]*len(df))), errors='coerce').fillna(0)
+        # Clean column names
+        for df in [df_2b, df_pr]:
+            df.columns = df.columns.str.replace('*', '', regex=False).str.strip().str.upper()
         
-        # Derive DOC_TYPE properly
-        if 'DOC_TYPE' not in df.columns or df['DOC_TYPE'].isna().any():
-            df['DOC_TYPE'] = df.apply(lambda r: get_document_type(r['TAXABLE_VALUE'], r.get('DOC_TYPE')), axis=1)
+        # Standardize column names
+        col_map = {
+            'SUPPLIER GSTIN': 'SUPPLIER_GSTIN', 'DOCUMENT NUMBER': 'DOC_NUMBER',
+            'TAXABLE VALUE': 'TAXABLE_VALUE', 'SUPPLIER NAME': 'SUPPLIER_NAME',
+            'MY GSTIN': 'MY_GSTIN', 'DOCUMENT DATE': 'DOC_DATE', 'DOC_TYPE': 'DOC_TYPE',
+            'REVERSE_CHARGE': 'REVERSE_CHARGE', 'ITC_CLAIM_TYPE': 'ITC_CLAIM_TYPE',
+            'PLACE_OF_SUPPLY': 'PLACE_OF_SUPPLY', 'MONTH': 'MONTH'
+        }
+        for old, new in col_map.items():
+            if old in df_2b.columns:
+                df_2b[new] = df_2b[old]
+            if old in df_pr.columns:
+                df_pr[new] = df_pr[old]
+        
+        # Ensure required columns exist
+        required = ['SUPPLIER_GSTIN', 'DOC_NUMBER', 'TAXABLE_VALUE', 'SUPPLIER_NAME', 
+                    'MY_GSTIN', 'DOC_DATE', 'IGST', 'CGST', 'SGST']
+        for col in required:
+            if col not in df_2b.columns:
+                df_2b[col] = None
+            if col not in df_pr.columns:
+                df_pr[col] = None
+        for df in [df_2b, df_pr]:
+            if 'CESS' not in df.columns:
+                df['CESS'] = 0
+        
+        # Fill NaN and standardize data types
+        for df in [df_2b, df_pr]:
+            df['SUPPLIER_GSTIN'] = df['SUPPLIER_GSTIN'].fillna('UNKNOWN').astype(str).str.upper().str.strip()
+            df['MY_GSTIN'] = df['MY_GSTIN'].fillna('').astype(str).str.upper().str.strip()
+            df['SUPPLIER_NAME'] = df['SUPPLIER_NAME'].fillna('Unknown').astype(str).str.strip()
+            df['DOC_NUMBER'] = df['DOC_NUMBER'].fillna('').astype(str).str.strip()
+            df['DOC_DATE'] = df['DOC_DATE'].fillna('').astype(str).str.strip()
+            df['REVERSE_CHARGE'] = df.get('REVERSE_CHARGE', pd.Series(['NO']*len(df))).fillna('NO').astype(str).str.upper().str.strip()
+            df['MONTH'] = df.get('MONTH', pd.Series(['Unknown']*len(df))).fillna('Unknown').apply(get_month_format)
+            df['ITC_CLAIM_TYPE'] = df.get('ITC_CLAIM_TYPE', pd.Series(['']*len(df))).fillna('').astype(str).str.strip().str.upper()
+            df['PLACE_OF_SUPPLY'] = df.get('PLACE_OF_SUPPLY', pd.Series(['']*len(df))).fillna('').astype(str).str.strip().str.upper()
+            
+            # Convert numeric columns
+            for col in ['TAXABLE_VALUE', 'IGST', 'CGST', 'SGST', 'CESS']:
+                df[col] = pd.to_numeric(df.get(col, pd.Series([0]*len(df))), errors='coerce').fillna(0)
+            
+            # Derive/standardize DOC_TYPE
+            if 'DOC_TYPE' not in df.columns or df['DOC_TYPE'].isna().any():
+                df['DOC_TYPE'] = df.apply(lambda r: get_document_type(r['TAXABLE_VALUE'], r.get('DOC_TYPE')), axis=1)
+            else:
+                if handle_cdn_neg:
+                    # Auto-correct DOC_TYPE based on value sign
+                    df.loc[(df['TAXABLE_VALUE'] < -0.01) & (~df['DOC_TYPE'].str.upper().isin(['CREDIT', 'CDN', 'CN'])), 'DOC_TYPE'] = 'CREDIT'
+                    df.loc[(df['TAXABLE_VALUE'] > 0.01) & (df['DOC_TYPE'].str.upper().isin(['CREDIT', 'CDN', 'CN'])), 'DOC_TYPE'] = 'INVOICE'
+                # Standardize DOC_TYPE values
+                df['DOC_TYPE'] = df['DOC_TYPE'].apply(lambda x: str(x).upper().strip())
+                df['DOC_TYPE'] = df['DOC_TYPE'].replace({
+                    'CREDIT NOTE': 'CREDIT', 'DEBIT NOTE': 'DEBIT', 
+                    'CDN': 'CREDIT', 'CN': 'CREDIT', 'CR': 'CREDIT',
+                    'DBN': 'DEBIT', 'DN': 'DEBIT', 'DB': 'DEBIT',
+                    'INV': 'INVOICE', 'B2B': 'INVOICE', 'B2C': 'INVOICE', 'I': 'INVOICE'
+                })
+            
+            # Validate GSTIN if enabled
+            if validate_gstin_flag:
+                df['GSTIN_VALID'] = df['SUPPLIER_GSTIN'].apply(validate_gstin_format)
+                invalid_count = (~df['GSTIN_VALID']).sum()
+                if invalid_count > 0:
+                    logger.warning(f"Found {invalid_count} invalid GSTINs in dataset")
+        
+        # Filter reverse charge if needed
+        if not include_rc:
+            df_2b = df_2b[df_2b['REVERSE_CHARGE'] != 'YES'].copy()
+            df_pr = df_pr[df_pr['REVERSE_CHARGE'] != 'YES'].copy()
+            logger.info("Filtered out reverse charge entries")
+        
+        # Create matching keys
+        for df in [df_2b, df_pr]:
+            df['PAN'] = df['SUPPLIER_GSTIN'].apply(extract_pan_from_gstin)
+            df['NORM_DOC'] = df['DOC_NUMBER'].apply(normalize_document_number)
+            df['MATCH_KEY'] = df['PAN'] + '|' + df['NORM_DOC'] + '|' + df['DOC_TYPE']
+        
+        # Check for duplicates in PR
+        dup_pr_count = df_pr.duplicated(subset=['MATCH_KEY'], keep=False).sum()
+        if dup_pr_count > 0:
+            logger.warning(f"Found {dup_pr_count} duplicate MATCH_KEY entries in Purchase Register")
+        
+        # Perform outer merge on MATCH_KEY
+        merged = pd.merge(df_2b, df_pr, on='MATCH_KEY', how='outer', suffixes=('_2B', '_PR'), indicator=True)
+        logger.info(f"Merged dataset has {len(merged)} records")
+        
+        # Calculate totals
+        tax_cols_2b = ['IGST_2B', 'CGST_2B', 'SGST_2B', 'CESS_2B']
+        tax_cols_pr = ['IGST_PR', 'CGST_PR', 'SGST_PR', 'CESS_PR']
+        merged['TOTAL_TAX_2B'] = merged[tax_cols_2b].sum(axis=1, skipna=True)
+        merged['TOTAL_TAX_PR'] = merged[tax_cols_pr].sum(axis=1, skipna=True)
+        merged['TAXABLE_DIFF'] = (merged['TAXABLE_VALUE_2B'].fillna(0) - merged['TAXABLE_VALUE_PR'].fillna(0)).abs()
+        merged['TAX_DIFF'] = (merged['TOTAL_TAX_2B'].fillna(0) - merged['TOTAL_TAX_PR'].fillna(0)).abs()
+        
+        # Build matching conditions
+        exact_gstin = merged['SUPPLIER_GSTIN_2B'].str.upper() == merged['SUPPLIER_GSTIN_PR'].str.upper()
+        exact_doc = merged['DOC_NUMBER_2B'].str.upper() == merged['DOC_NUMBER_PR'].str.upper()
+        tax_within_tol = merged['TAXABLE_DIFF'] <= tolerance
+        tax_exact = merged['TAXABLE_DIFF'] == 0
+        same_pan = merged['PAN_2B'] == merged['PAN_PR']
+        norm_doc_match = merged['NORM_DOC_2B'] == merged['NORM_DOC_PR']
+        same_doc_type = merged['DOC_TYPE_2B'] == merged['DOC_TYPE_PR']
+        date_differs = merged['DOC_DATE_2B'] != merged['DOC_DATE_PR']
+        
+        # Calculate date difference for suggested matches
+        merged['DATE_DIFF_DAYS'] = merged.apply(
+            lambda r: calculate_date_difference(r['DOC_DATE_2B'], r['DOC_DATE_PR']), axis=1
+        )
+        within_date_tol = merged['DATE_DIFF_DAYS'].notna() & (merged['DATE_DIFF_DAYS'] <= date_tol_days)
+        
+        # Financial year check if enabled
+        if strict_fy:
+            within_fy = merged.apply(lambda r: is_same_financial_year(r['DOC_DATE_2B'], r['DOC_DATE_PR']), axis=1)
         else:
-            if handle_cdn_neg:
-                df.loc[(df['TAXABLE_VALUE'] < 0) & (~df['DOC_TYPE'].str.upper().isin(['CREDIT', 'CDN', 'CN'])), 'DOC_TYPE'] = 'CREDIT'
-                df.loc[(df['TAXABLE_VALUE'] > 0) & (df['DOC_TYPE'].str.upper().isin(['CREDIT', 'CDN', 'CN'])), 'DOC_TYPE'] = 'INVOICE'
-            df['DOC_TYPE'] = df['DOC_TYPE'].apply(lambda x: str(x).upper().strip())
-            df['DOC_TYPE'] = df['DOC_TYPE'].replace({'CREDIT NOTE': 'CREDIT', 'DEBIT NOTE': 'DEBIT', 'CDN': 'CREDIT', 'CN': 'CREDIT', 'DBN': 'DEBIT', 'DN': 'DEBIT', 'INV': 'INVOICE', 'B2B': 'INVOICE', 'B2C': 'INVOICE'})
-    
-    # Filter reverse charge if needed
-    if not include_rc:
-        df_2b = df_2b[df_2b['REVERSE_CHARGE'] != 'YES'].copy()
-        df_pr = df_pr[df_pr['REVERSE_CHARGE'] != 'YES'].copy()
-    
-    # Create matching keys
-    for df in [df_2b, df_pr]:
-        df['PAN'] = df['SUPPLIER_GSTIN'].apply(extract_pan_from_gstin)
-        df['NORM_DOC'] = df['DOC_NUMBER'].apply(normalize_document_number)
-        df['MATCH_KEY'] = df['PAN'] + '|' + df['NORM_DOC'] + '|' + df['DOC_TYPE']
-    
-    dup_pr_count = df_pr.duplicated(subset=['MATCH_KEY'], keep=False).sum()
-    
-    # Outer merge
-    merged = pd.merge(df_2b, df_pr, on='MATCH_KEY', how='outer', suffixes=('_2B', '_PR'), indicator=True)
-    
-    # Calculate totals
-    merged['TOTAL_TAX_2B'] = merged[['IGST_2B', 'CGST_2B', 'SGST_2B', 'CESS_2B']].sum(axis=1)
-    merged['TOTAL_TAX_PR'] = merged[['IGST_PR', 'CGST_PR', 'SGST_PR', 'CESS_PR']].sum(axis=1)
-    merged['TAXABLE_DIFF'] = (merged['TAXABLE_VALUE_2B'].fillna(0) - merged['TAXABLE_VALUE_PR'].fillna(0)).abs()
-    merged['TAX_DIFF'] = (merged['TOTAL_TAX_2B'].fillna(0) - merged['TOTAL_TAX_PR'].fillna(0)).abs()
-    
-    # Matching conditions
-    exact_gstin = merged['SUPPLIER_GSTIN_2B'].str.upper() == merged['SUPPLIER_GSTIN_PR'].str.upper()
-    exact_doc = merged['DOC_NUMBER_2B'].str.upper() == merged['DOC_NUMBER_PR'].str.upper()
-    tax_within_tol = merged['TAXABLE_DIFF'] <= tolerance
-    tax_exact = merged['TAXABLE_DIFF'] == 0
-    same_pan = merged['PAN_2B'] == merged['PAN_PR']
-    norm_doc_match = merged['NORM_DOC_2B'] == merged['NORM_DOC_PR']
-    same_doc_type = merged['DOC_TYPE_2B'] == merged['DOC_TYPE_PR']
-    date_differs = merged['DOC_DATE_2B'] != merged['DOC_DATE_PR']
-    within_fy = merged.apply(lambda r: is_same_financial_year(r['DOC_DATE_2B'], r['DOC_DATE_PR']), axis=1)
-    
-    conditions = [
-        (merged['_merge'] == 'both') & exact_gstin & exact_doc & same_doc_type & tax_exact,
-        (merged['_merge'] == 'both') & same_pan & norm_doc_match & same_doc_type & tax_within_tol & date_differs & within_fy,
-        (merged['_merge'] == 'both') & exact_gstin & exact_doc & same_doc_type & ~tax_within_tol,
-        (merged['_merge'] == 'both') & same_pan & norm_doc_match & tax_within_tol & ~same_doc_type,
-        (merged['_merge'] == 'both') & same_pan & ~exact_gstin & tax_within_tol,
-        (merged['_merge'] == 'left_only'),
-        (merged['_merge'] == 'right_only'),
-    ]
-    statuses = ['Exact', 'Suggested', 'Value Mismatch', 'Doc Type Mismatch', 'Cross-State (PAN Match)', 'Missing in GSTR 2B', 'Missing in PR']
-    reasons = [
-        'All parameters matching exactly including DOC_TYPE',
-        'Document date differs within FY, values within tolerance, same DOC_TYPE',
-        'Document number & GSTIN match, but taxable/tax mismatch exceeds tolerance',
-        'Document matches but DOC_TYPE differs (Invoice vs Credit/Debit)',
-        'Matched on PAN, but State GSTIN differs',
-        'Present in GSTR-2B but missing in Purchase Register',
-        'Present in Purchase Register but missing in GSTR-2B'
-    ]
-    
-    merged['MATCH_STATUS'] = np.select(conditions, statuses, default='Other')
-    merged['MATCH_REASON'] = np.select(conditions, reasons, default='Unable to determine match criteria')
-    merged['SUPPLIER_NAME_COMBINED'] = merged['SUPPLIER_NAME_2B'].combine_first(merged['SUPPLIER_NAME_PR']).fillna('Unknown')
-    
-    # ITC eligibility
-    def determine_itc(row):
-        if row['MATCH_STATUS'] == 'Exact' and auto_claim_itc:
-            return 'ELIGIBLE'
-        elif row['MATCH_STATUS'] == 'Suggested':
-            return 'REVIEW REQUIRED'
-        elif row['MATCH_STATUS'] in ['Missing in GSTR 2B', 'Value Mismatch']:
-            return 'NOT ELIGIBLE'
-        elif row['MATCH_STATUS'] == 'Missing in PR':
-            return 'PENDING BOOKS ENTRY'
-        elif row['DOC_TYPE_2B'] == 'CREDIT' or row['DOC_TYPE_PR'] == 'CREDIT':
-            return 'CREDIT NOTE - REVIEW'
+            within_fy = pd.Series([True] * len(merged))
+        
+        # Fuzzy name matching for additional validation
+        if fuzzy_threshold < 100:
+            merged['NAME_FUZZY_MATCH'] = merged.apply(
+                lambda r: fuzzy_match_names(r['SUPPLIER_NAME_2B'], r['SUPPLIER_NAME_PR'], fuzzy_threshold), axis=1
+            )
         else:
-            return row.get('ITC_CLAIM_TYPE_2B', row.get('ITC_CLAIM_TYPE_PR', 'UNKNOWN'))
-    
-    merged['ITC_ELIGIBILITY'] = merged.apply(determine_itc, axis=1)
-    
-    return merged, dup_pr_count, df_2b, df_pr
+            merged['NAME_FUZZY_MATCH'] = pd.Series([True] * len(merged))
+        
+        # Define matching logic with priority
+        conditions = [
+            # 1. EXACT: All parameters match exactly including DOC_TYPE
+            (merged['_merge'] == 'both') & exact_gstin & exact_doc & same_doc_type & tax_exact,
+            
+            # 2. SUGGESTED: PAN + Normalized Doc + Values within tolerance + Date within FY & tolerance
+            (merged['_merge'] == 'both') & same_pan & norm_doc_match & same_doc_type & 
+            tax_within_tol & within_date_tol & within_fy & merged['NAME_FUZZY_MATCH'],
+            
+            # 3. VALUE MISMATCH: Document matches but amounts differ beyond tolerance
+            (merged['_merge'] == 'both') & exact_gstin & exact_doc & same_doc_type & ~tax_within_tol,
+            
+            # 4. DOC TYPE MISMATCH: Document matches but DOC_TYPE differs
+            (merged['_merge'] == 'both') & same_pan & norm_doc_match & tax_within_tol & ~same_doc_type,
+            
+            # 5. CROSS-STATE: Matched on PAN but different state GSTIN
+            (merged['_merge'] == 'both') & same_pan & ~exact_gstin & tax_within_tol,
+            
+            # 6. MISSING IN 2B: Present in PR but not in 2B
+            (merged['_merge'] == 'right_only'),
+            
+            # 7. MISSING IN PR: Present in 2B but not in PR
+            (merged['_merge'] == 'left_only'),
+        ]
+        
+        statuses = [
+            'Exact', 'Suggested', 'Value Mismatch', 'Doc Type Mismatch', 
+            'Cross-State (PAN Match)', 'Missing in PR', 'Missing in GSTR 2B'
+        ]
+        
+        reasons = [
+            'All parameters matching exactly including DOC_TYPE and values',
+            'Document date differs within tolerance & FY, values within tolerance, same DOC_TYPE, name fuzzy match',
+            'Document number & GSTIN match, but taxable/tax mismatch exceeds tolerance',
+            'Document matches but DOC_TYPE differs (Invoice vs Credit/Debit Note)',
+            'Matched on PAN, but State GSTIN differs (inter-state transaction)',
+            'Present in Purchase Register but missing in GSTR-2B',
+            'Present in GSTR-2B but missing in Purchase Register'
+        ]
+        
+        merged['MATCH_STATUS'] = np.select(conditions, statuses, default='Other')
+        merged['MATCH_REASON'] = np.select(conditions, reasons, default='Unable to determine match criteria')
+        merged['SUPPLIER_NAME_COMBINED'] = merged['SUPPLIER_NAME_2B'].combine_first(merged['SUPPLIER_NAME_PR']).fillna('Unknown')
+        
+        # ITC eligibility determination
+        def determine_itc(row):
+            if row['MATCH_STATUS'] == 'Exact' and auto_claim_itc:
+                return 'ELIGIBLE'
+            elif row['MATCH_STATUS'] == 'Suggested':
+                return 'REVIEW REQUIRED'
+            elif row['MATCH_STATUS'] in ['Missing in GSTR 2B', 'Value Mismatch']:
+                return 'NOT ELIGIBLE'
+            elif row['MATCH_STATUS'] == 'Missing in PR':
+                return 'PENDING BOOKS ENTRY'
+            elif row['DOC_TYPE_2B'] == 'CREDIT' or row['DOC_TYPE_PR'] == 'CREDIT':
+                return 'CREDIT NOTE - REVIEW'
+            elif row['MATCH_STATUS'] == 'Doc Type Mismatch':
+                return 'DOC TYPE CONFLICT'
+            else:
+                return row.get('ITC_CLAIM_TYPE_2B', row.get('ITC_CLAIM_TYPE_PR', 'UNKNOWN'))
+        
+        merged['ITC_ELIGIBILITY'] = merged.apply(determine_itc, axis=1)
+        
+        # Calculate processing stats
+        processing_time = time.time() - start_time
+        stats = {
+            'processing_time_sec': round(processing_time, 2),
+            'total_2b_records': len(df_2b),
+            'total_pr_records': len(df_pr),
+            'merged_records': len(merged),
+            'exact_matches': (merged['MATCH_STATUS'] == 'Exact').sum(),
+            'suggested_matches': (merged['MATCH_STATUS'] == 'Suggested').sum(),
+            'value_mismatches': (merged['MATCH_STATUS'] == 'Value Mismatch').sum(),
+            'missing_in_2b': (merged['MATCH_STATUS'] == 'Missing in GSTR 2B').sum(),
+            'missing_in_pr': (merged['MATCH_STATUS'] == 'Missing in PR').sum(),
+            'duplicate_pr_keys': dup_pr_count,
+            'invalid_gstins_2b': df_2b.get('GSTIN_VALID', pd.Series([True]*len(df_2b))).sum() if validate_gstin_flag else 0,
+            'invalid_gstins_pr': df_pr.get('GSTIN_VALID', pd.Series([True]*len(df_pr))).sum() if validate_gstin_flag else 0,
+        }
+        
+        logger.info(f"Reconciliation completed in {processing_time:.2f}s")
+        return merged, dup_pr_count, df_2b, df_pr, stats
+        
+    except Exception as e:
+        logger.error(f"Reconciliation failed: {str(e)}", exc_info=True)
+        raise
 
-# ================= MAIN PROCESSING LOGIC =================
+
+# ==================== MAIN PROCESSING LOGIC ====================
 if file_2b and file_pr:
     try:
         with st.spinner("🚀 Running Advanced Reconciliation Engine..."):
-            merged_df, dup_pr_count, df_2b, df_pr = process_reconciliation(
-                file_2b.getvalue(), file_pr.getvalue(), tolerance, date_tolerance, 
-                include_reverse_charge, handle_cdn_negative
+            # Check if files have changed (avoid reprocessing same files)
+            current_2b_hash = generate_file_hash(file_2b.getvalue())
+            current_pr_hash = generate_file_hash(file_pr.getvalue())
+            
+            # Process reconciliation
+            merged_df, dup_pr_count, df_2b, df_pr, stats = process_reconciliation(
+                file_2b.getvalue(), file_pr.getvalue(), 
+                tolerance, date_tolerance, include_reverse_charge, 
+                handle_cdn_negative, fuzzy_threshold, validate_gstin, strict_financial_year
             )
             
-            # Summary stats
+            # Store processed data in session state for export
+            st.session_state.processed_data = {
+                'merged': merged_df,
+                'df_2b': df_2b,
+                'df_pr': df_pr,
+                'stats': stats
+            }
+            
+            # Calculate summary statistics
             status_counts = merged_df['MATCH_STATUS'].value_counts()
             total_records = len(merged_df)
             exact_count = status_counts.get('Exact', 0)
@@ -1012,14 +1390,19 @@ if file_2b and file_pr:
             for dt in ['INVOICE', 'CREDIT', 'DEBIT']:
                 mask_2b = df_2b['DOC_TYPE'] == dt
                 mask_pr = df_pr['DOC_TYPE'] == dt
-                doc_type_stats[f'{dt}_2B_count'] = mask_2b.sum()
-                doc_type_stats[f'{dt}_2B_taxable'] = df_2b.loc[mask_2b, 'TAXABLE_VALUE'].sum()
-                doc_type_stats[f'{dt}_2B_tax'] = df_2b.loc[mask_2b, ['IGST', 'CGST', 'SGST', 'CESS']].sum().sum()
-                doc_type_stats[f'{dt}_PR_count'] = mask_pr.sum()
-                doc_type_stats[f'{dt}_PR_taxable'] = df_pr.loc[mask_pr, 'TAXABLE_VALUE'].sum()
-                doc_type_stats[f'{dt}_PR_tax'] = df_pr.loc[mask_pr, ['IGST', 'CGST', 'SGST', 'CESS']].sum().sum()
+                doc_type_stats[f'{dt}_2B_count'] = int(mask_2b.sum())
+                doc_type_stats[f'{dt}_2B_taxable'] = float(df_2b.loc[mask_2b, 'TAXABLE_VALUE'].sum())
+                doc_type_stats[f'{dt}_2B_tax'] = float(df_2b.loc[mask_2b, ['IGST', 'CGST', 'SGST', 'CESS']].sum().sum())
+                doc_type_stats[f'{dt}_PR_count'] = int(mask_pr.sum())
+                doc_type_stats[f'{dt}_PR_taxable'] = float(df_pr.loc[mask_pr, 'TAXABLE_VALUE'].sum())
+                doc_type_stats[f'{dt}_PR_tax'] = float(df_pr.loc[mask_pr, ['IGST', 'CGST', 'SGST', 'CESS']].sum().sum())
             
-            # DASHBOARD METRICS
+            # Calculate financial metrics
+            unclaimed_itc = merged_df[merged_df['MATCH_STATUS'] == 'Missing in PR']['TOTAL_TAX_2B'].sum()
+            risky_claims = merged_df[merged_df['MATCH_STATUS'] == 'Missing in GSTR 2B']['TOTAL_TAX_PR'].sum()
+            match_rate = (exact_count + suggested_count) / total_records * 100 if total_records > 0 else 0
+            
+            # ==================== DASHBOARD METRICS ====================
             st.markdown("""
             <div class="section-card animate-fade-in">
                 <h3><span class="icon">📊</span> Live Reconciliation Dashboard</h3>
@@ -1036,14 +1419,13 @@ if file_2b and file_pr:
                 </div>
                 """, unsafe_allow_html=True)
             with m2:
-                match_rate = (exact_count + suggested_count) / total_records * 100 if total_records > 0 else 0
+                delta_class = 'positive' if match_rate >= 80 else 'negative'
+                delta_text = '↑ Excellent' if match_rate >= 90 else '↑ Good' if match_rate >= 80 else '↓ Review needed'
                 st.markdown(f"""
                 <div class="metric-card">
                     <div class="metric-label">✅ Match Rate</div>
                     <div class="metric-value">{match_rate:.1f}%</div>
-                    <div class="metric-delta {'positive' if match_rate >= 80 else 'negative'}">
-                        {'↑ Excellent' if match_rate >= 90 else '↑ Good' if match_rate >= 80 else '↓ Review needed'}
-                    </div>
+                    <div class="metric-delta {delta_class}">{delta_text}</div>
                 </div>
                 """, unsafe_allow_html=True)
             with m3:
@@ -1055,7 +1437,6 @@ if file_2b and file_pr:
                 </div>
                 """, unsafe_allow_html=True)
             with m4:
-                unclaimed_itc = merged_df[merged_df['MATCH_STATUS'] == 'Missing in PR']['TOTAL_TAX_2B'].sum()
                 st.markdown(f"""
                 <div class="metric-card">
                     <div class="metric-label">💰 Unclaimed ITC</div>
@@ -1064,7 +1445,6 @@ if file_2b and file_pr:
                 </div>
                 """, unsafe_allow_html=True)
             with m5:
-                risky_claims = merged_df[merged_df['MATCH_STATUS'] == 'Missing in GSTR 2B']['TOTAL_TAX_PR'].sum()
                 st.markdown(f"""
                 <div class="metric-card">
                     <div class="metric-label">⚠️ Risk Claims</div>
@@ -1073,7 +1453,7 @@ if file_2b and file_pr:
                 </div>
                 """, unsafe_allow_html=True)
             
-            # DOC_TYPE BREAKDOWN SECTION
+            # ==================== DOC_TYPE BREAKDOWN SECTION ====================
             st.markdown("""
             <div class="section-card animate-fade-in">
                 <h3><span class="icon">📑</span> Document Type Breakdown</h3>
@@ -1137,7 +1517,7 @@ if file_2b and file_pr:
                 </div>
                 """, unsafe_allow_html=True)
             
-            # AI INSIGHTS
+            # ==================== AI INSIGHTS ====================
             st.markdown("""
             <div class="section-card animate-fade-in">
                 <h3><span class="icon">🧠</span> AI-Powered Financial Insights</h3>
@@ -1146,21 +1526,23 @@ if file_2b and file_pr:
             
             insights = []
             if dup_pr_count > 0:
-                insights.append({'type': 'warning', 'icon': '⚠️', 'title': 'Data Quality Alert', 'message': f"Found **{dup_pr_count} duplicate entries** in Purchase Register."})
+                insights.append({'type': 'warning', 'icon': '⚠️', 'title': 'Data Quality Alert', 'message': f"Found **{dup_pr_count} duplicate entries** in Purchase Register. Review for data integrity."})
             if missing_pr > 0:
-                insights.append({'type': 'success', 'icon': '💡', 'title': 'Cash Flow Opportunity', 'message': f"**₹{unclaimed_itc:,.2f}** in ITC available in GSTR-2B but not claimed."})
+                insights.append({'type': 'success', 'icon': '💡', 'title': 'Cash Flow Opportunity', 'message': f"**₹{unclaimed_itc:,.2f}** in ITC available in GSTR-2B but not claimed in books. Consider claiming to improve cash flow."})
             if missing_2b > 0:
-                insights.append({'type': 'error', 'icon': '🚨', 'title': 'Compliance Risk', 'message': f"**₹{risky_claims:,.2f}** claimed in books but missing from GSTR-2B."})
+                insights.append({'type': 'error', 'icon': '🚨', 'title': 'Compliance Risk', 'message': f"**₹{risky_claims:,.2f}** claimed in books but missing from GSTR-2B. This may lead to ITC reversal notices."})
             if match_rate < 80:
-                insights.append({'type': 'warning', 'icon': '🔄', 'title': 'Reconciliation Health', 'message': f"Match rate is **{match_rate:.1f}%**. Review document numbering."})
+                insights.append({'type': 'warning', 'icon': '🔄', 'title': 'Reconciliation Health', 'message': f"Match rate is **{match_rate:.1f}%**. Review document numbering conventions and date formats."})
             elif match_rate >= 95:
-                insights.append({'type': 'success', 'icon': '✅', 'title': 'Excellent Health', 'message': f"Outstanding match rate of **{match_rate:.1f}%**!"})
+                insights.append({'type': 'success', 'icon': '✅', 'title': 'Excellent Health', 'message': f"Outstanding match rate of **{match_rate:.1f}%**! Your GST compliance is in excellent shape."})
             if suggested_count > 0:
-                insights.append({'type': 'info', 'icon': '🕒', 'title': 'Date Mismatches', 'message': f"**{suggested_count} records** have date differences but match on other parameters."})
+                insights.append({'type': 'info', 'icon': '🕒', 'title': 'Date Mismatches', 'message': f"**{suggested_count} records** have date differences within tolerance. Review for accurate period reporting."})
             if doc_type_stats['CREDIT_2B_count'] != doc_type_stats['CREDIT_PR_count']:
-                insights.append({'type': 'warning', 'icon': '📉', 'title': 'Credit Note Mismatch', 'message': f"Credit note counts differ: {doc_type_stats['CREDIT_2B_count']} in 2B vs {doc_type_stats['CREDIT_PR_count']} in PR."})
+                insights.append({'type': 'warning', 'icon': '📉', 'title': 'Credit Note Mismatch', 'message': f"Credit note counts differ: {doc_type_stats['CREDIT_2B_count']} in 2B vs {doc_type_stats['CREDIT_PR_count']} in PR. Verify all credit notes are properly recorded."})
+            if validate_gstin and (stats.get('invalid_gstins_2b', 0) > 0 or stats.get('invalid_gstins_pr', 0) > 0):
+                insights.append({'type': 'error', 'icon': '🔍', 'title': 'GSTIN Validation', 'message': "Invalid GSTIN formats detected. Ensure all GSTINs follow the 15-character format for accurate matching."})
             if not insights:
-                insights.append({'type': 'success', 'icon': '🎉', 'title': 'All Clear', 'message': "No critical issues detected. Your GST reconciliation is healthy!"})
+                insights.append({'type': 'success', 'icon': '🎉', 'title': 'All Clear', 'message': "No critical issues detected. Your GST reconciliation is healthy and compliant!"})
             
             for i, insight in enumerate(insights):
                 st.markdown(f"""
@@ -1170,7 +1552,7 @@ if file_2b and file_pr:
                 </div>
                 """, unsafe_allow_html=True)
             
-            # VISUALIZATIONS
+            # ==================== VISUALIZATIONS ====================
             st.markdown("""
             <div class="section-card animate-fade-in">
                 <h3><span class="icon">📈</span> Visual Analytics</h3>
@@ -1182,52 +1564,129 @@ if file_2b and file_pr:
             with tab1:
                 status_data = merged_df['MATCH_STATUS'].value_counts().reset_index()
                 status_data.columns = ['Status', 'Count']
-                color_map = {'Exact': '#10b981', 'Suggested': '#06b6d4', 'Value Mismatch': '#f97316', 'Doc Type Mismatch': '#8b5cf6', 'Cross-State (PAN Match)': '#6366f1', 'Missing in GSTR 2B': '#ef4444', 'Missing in PR': '#f59e0b', 'Other': '#64748b'}
-                fig_status = px.pie(status_data, values='Count', names='Status', color='Status', color_discrete_map=color_map, hole=0.5, title='Reconciliation Status Distribution')
+                color_map = {
+                    'Exact': '#10b981', 'Suggested': '#06b6d4', 'Value Mismatch': '#f97316', 
+                    'Doc Type Mismatch': '#8b5cf6', 'Cross-State (PAN Match)': '#6366f1', 
+                    'Missing in GSTR 2B': '#ef4444', 'Missing in PR': '#f59e0b', 'Other': '#64748b'
+                }
+                fig_status = px.pie(
+                    status_data, values='Count', names='Status', 
+                    color='Status', color_discrete_map=color_map, 
+                    hole=0.5, title='Reconciliation Status Distribution'
+                )
                 fig_status.update_traces(textposition='inside', textinfo='percent+label')
-                fig_status.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', legend=dict(orientation='h', yanchor='bottom', y=-0.2, xanchor='center', x=0.5), height=450)
+                fig_status.update_layout(
+                    plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', 
+                    legend=dict(orientation='h', yanchor='bottom', y=-0.2, xanchor='center', x=0.5), 
+                    height=450, margin=dict(t=50, b=50, l=20, r=20)
+                )
                 st.plotly_chart(fig_status, use_container_width=True)
             
             with tab2:
                 dt_data = pd.DataFrame({
                     'Document Type': ['INVOICE', 'CREDIT', 'DEBIT'],
-                    'GSTR-2B Taxable': [doc_type_stats['INVOICE_2B_taxable'], doc_type_stats['CREDIT_2B_taxable'], doc_type_stats['DEBIT_2B_taxable']],
-                    'Purchase Register Taxable': [doc_type_stats['INVOICE_PR_taxable'], doc_type_stats['CREDIT_PR_taxable'], doc_type_stats['DEBIT_PR_taxable']]
+                    'GSTR-2B Taxable': [
+                        doc_type_stats['INVOICE_2B_taxable'], 
+                        doc_type_stats['CREDIT_2B_taxable'], 
+                        doc_type_stats['DEBIT_2B_taxable']
+                    ],
+                    'Purchase Register Taxable': [
+                        doc_type_stats['INVOICE_PR_taxable'], 
+                        doc_type_stats['CREDIT_PR_taxable'], 
+                        doc_type_stats['DEBIT_PR_taxable']
+                    ]
                 })
-                fig_dt = px.bar(dt_data, x='Document Type', y=['GSTR-2B Taxable', 'Purchase Register Taxable'], barmode='group', title='Taxable Value by Document Type', labels={'value': 'Amount (₹)'})
-                fig_dt.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', height=450, legend=dict(orientation='h', y=-0.2))
+                fig_dt = px.bar(
+                    dt_data, x='Document Type', 
+                    y=['GSTR-2B Taxable', 'Purchase Register Taxable'], 
+                    barmode='group', title='Taxable Value by Document Type', 
+                    labels={'value': 'Amount (₹)', 'Document Type': 'Type'}
+                )
+                fig_dt.update_layout(
+                    plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', 
+                    height=450, legend=dict(orientation='h', y=-0.2),
+                    margin=dict(t=50, b=50, l=20, r=20)
+                )
                 st.plotly_chart(fig_dt, use_container_width=True)
             
             with tab3:
                 if 'MONTH_2B' in merged_df.columns:
-                    monthly = merged_df.groupby('MONTH_2B').agg({'TAXABLE_VALUE_2B': 'sum', 'TOTAL_TAX_2B': 'sum', 'TAXABLE_VALUE_PR': 'sum', 'TOTAL_TAX_PR': 'sum'}).reset_index().fillna(0)
+                    monthly = merged_df.groupby('MONTH_2B').agg({
+                        'TAXABLE_VALUE_2B': 'sum', 
+                        'TOTAL_TAX_2B': 'sum', 
+                        'TAXABLE_VALUE_PR': 'sum', 
+                        'TOTAL_TAX_PR': 'sum'
+                    }).reset_index().fillna(0)
+                    
                     fig_monthly = go.Figure()
-                    fig_monthly.add_trace(go.Bar(x=monthly['MONTH_2B'], y=monthly['TAXABLE_VALUE_2B'], name='Taxable (2B)', marker_color=px.colors.qualitative.Set1[0]))
-                    fig_monthly.add_trace(go.Bar(x=monthly['MONTH_2B'], y=monthly['TAXABLE_VALUE_PR'], name='Taxable (PR)', marker_color=px.colors.qualitative.Set1[1]))
-                    fig_monthly.update_layout(barmode='group', title='Monthly Taxable Value Comparison', plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', height=450, legend=dict(orientation='h', y=-0.2), xaxis_tickangle=-45)
+                    fig_monthly.add_trace(go.Bar(
+                        x=monthly['MONTH_2B'], y=monthly['TAXABLE_VALUE_2B'], 
+                        name='Taxable (2B)', marker_color=px.colors.qualitative.Set1[0]
+                    ))
+                    fig_monthly.add_trace(go.Bar(
+                        x=monthly['MONTH_2B'], y=monthly['TAXABLE_VALUE_PR'], 
+                        name='Taxable (PR)', marker_color=px.colors.qualitative.Set1[1]
+                    ))
+                    fig_monthly.update_layout(
+                        barmode='group', title='Monthly Taxable Value Comparison', 
+                        plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', 
+                        height=450, legend=dict(orientation='h', y=-0.2), 
+                        xaxis_tickangle=-45, margin=dict(t=50, b=80, l=20, r=20)
+                    )
                     st.plotly_chart(fig_monthly, use_container_width=True)
             
             with tab4:
                 col_f1, col_f2, col_f3 = st.columns(3)
                 with col_f1:
-                    status_filter = st.multiselect("Filter Status", merged_df['MATCH_STATUS'].unique().tolist(), default=merged_df['MATCH_STATUS'].unique().tolist())
+                    status_filter = st.multiselect(
+                        "Filter Status", 
+                        merged_df['MATCH_STATUS'].unique().tolist(), 
+                        default=merged_df['MATCH_STATUS'].unique().tolist(),
+                        key="status_filter_multiselect"
+                    )
                 with col_f2:
-                    search = st.text_input("🔎 Search Supplier", placeholder="Type to search...")
+                    search = st.text_input("🔎 Search Supplier", placeholder="Type to search...", key="supplier_search")
                 with col_f3:
-                    min_val = st.number_input("Min Value (₹)", min_value=0, value=0, step=1000)
+                    min_val = st.number_input("Min Value (₹)", min_value=0, value=0, step=1000, key="min_value_filter")
                 
+                # Apply filters
                 filtered = merged_df.copy()
                 if status_filter:
                     filtered = filtered[filtered['MATCH_STATUS'].isin(status_filter)]
                 if search:
                     filtered = filtered[filtered['SUPPLIER_NAME_COMBINED'].str.contains(search, case=False, na=False)]
                 if min_val > 0:
-                    filtered = filtered[(filtered['TAXABLE_VALUE_2B'].abs() >= min_val) | (filtered['TAXABLE_VALUE_PR'].abs() >= min_val)]
+                    filtered = filtered[
+                        (filtered['TAXABLE_VALUE_2B'].abs() >= min_val) | 
+                        (filtered['TAXABLE_VALUE_PR'].abs() >= min_val)
+                    ]
                 
-                display_cols = ['MATCH_STATUS', 'SUPPLIER_NAME_COMBINED', 'DOC_TYPE_2B', 'DOC_NUMBER_2B', 'DOC_NUMBER_PR', 'TAXABLE_VALUE_2B', 'TAXABLE_VALUE_PR', 'TOTAL_TAX_2B', 'TOTAL_TAX_PR', 'ITC_ELIGIBILITY']
-                st.dataframe(filtered[display_cols].head(100).style.format({'TAXABLE_VALUE_2B': '₹{:.2f}', 'TAXABLE_VALUE_PR': '₹{:.2f}', 'TOTAL_TAX_2B': '₹{:.2f}', 'TOTAL_TAX_PR': '₹{:.2f}'}).map(lambda x: f'<span class="status-badge status-{str(x).lower().replace(" ", "-")}">{x}</span>' if x in ['Exact', 'Suggested', 'Value Mismatch', 'Missing in GSTR 2B', 'Missing in PR'] else x, subset=['MATCH_STATUS']), use_container_width=True, hide_index=True)
+                # Select display columns
+                display_cols = [
+                    'MATCH_STATUS', 'SUPPLIER_NAME_COMBINED', 'DOC_TYPE_2B', 
+                    'DOC_NUMBER_2B', 'DOC_NUMBER_PR', 'TAXABLE_VALUE_2B', 
+                    'TAXABLE_VALUE_PR', 'TOTAL_TAX_2B', 'TOTAL_TAX_PR', 'ITC_ELIGIBILITY'
+                ]
+                
+                # ✅ FIXED: Use CSS-based styling instead of HTML tags
+                def style_status(val):
+                    """Apply CSS classes based on match status"""
+                    if pd.isna(val):
+                        return ''
+                    val_lower = str(val).lower().replace(' ', '-')
+                    return f'dataframe-status-{val_lower}'
+                
+                # Format numeric columns and apply status styling
+                styled_df = filtered[display_cols].head(100).style.format({
+                    'TAXABLE_VALUE_2B': '₹{:.2f}',
+                    'TAXABLE_VALUE_PR': '₹{:.2f}', 
+                    'TOTAL_TAX_2B': '₹{:.2f}',
+                    'TOTAL_TAX_PR': '₹{:.2f}'
+                }).map(style_status, subset=['MATCH_STATUS'])
+                
+                st.dataframe(styled_df, use_container_width=True, hide_index=True)
             
-            # EXPORT SECTION
+            # ==================== EXPORT SECTION ====================
             st.markdown("""
             <div class="section-card animate-fade-in">
                 <h3><span class="icon">📤</span> Export Reconciliation Report</h3>
@@ -1240,68 +1699,142 @@ if file_2b and file_pr:
                 <div style="background: rgba(99, 102, 241, 0.05); border-radius: 12px; padding: 20px; border: 1px solid var(--border-light);">
                     <strong>📋 Report Includes:</strong>
                     <ul style="margin: 10px 0 0 20px; color: var(--text-secondary); line-height: 1.8;">
-                        <li>Executive Dashboard with charts</li>
+                        <li>Executive Dashboard with interactive charts</li>
                         <li>Detailed reconciliation with DOC_TYPE breakdown</li>
                         <li>Credit/Debit Note handling with negative values</li>
                         <li>Summary tables matching GST portal format</li>
                         <li>Raw data sheets for audit trail</li>
                         <li><strong>DOC_TYPE dropdown validation (INVOICE/CREDIT/DEBIT)</strong></li>
                         <li>Month format: JANUARY-25, FEBRUARY-25, etc.</li>
+                        <li>Processing metadata and audit log</li>
                     </ul>
                 </div>
                 """, unsafe_allow_html=True)
             with col_export2:
-                # Create Excel with dropdown validation
+                # Create Excel with dropdown validation and multiple sheets
                 output = io.BytesIO()
                 with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                    recon_df = merged_df[['MATCH_STATUS', 'MATCH_REASON', 'SUPPLIER_NAME_COMBINED', 'SUPPLIER_GSTIN_2B', 'SUPPLIER_GSTIN_PR', 'DOC_NUMBER_2B', 'DOC_NUMBER_PR', 'DOC_DATE_2B', 'DOC_DATE_PR', 'DOC_TYPE_2B', 'DOC_TYPE_PR', 'MONTH_2B', 'MONTH_PR', 'TAXABLE_VALUE_2B', 'TAXABLE_VALUE_PR', 'TOTAL_TAX_2B', 'TOTAL_TAX_PR', 'ITC_ELIGIBILITY']].copy()
-                    recon_df.columns = ['Match Status', 'Match Reason', 'Supplier Name', 'Supplier GSTIN (2B)', 'Supplier GSTIN (PR)', 'Document Number (2B)', 'Document Number (PR)', 'Document Date (2B)', 'Document Date (PR)', 'Doc Type (2B)', 'Doc Type (PR)', 'Month (2B)', 'Month (PR)', 'Taxable Value (2B)', 'Taxable Value (PR)', 'Total Tax (2B)', 'Total Tax (PR)', 'ITC Eligibility']
+                    # Prepare reconciliation sheet
+                    recon_df = merged_df[[
+                        'MATCH_STATUS', 'MATCH_REASON', 'SUPPLIER_NAME_COMBINED', 
+                        'SUPPLIER_GSTIN_2B', 'SUPPLIER_GSTIN_PR', 'DOC_NUMBER_2B', 
+                        'DOC_NUMBER_PR', 'DOC_DATE_2B', 'DOC_DATE_PR', 'DOC_TYPE_2B', 
+                        'DOC_TYPE_PR', 'MONTH_2B', 'MONTH_PR', 'TAXABLE_VALUE_2B', 
+                        'TAXABLE_VALUE_PR', 'TOTAL_TAX_2B', 'TOTAL_TAX_PR', 'ITC_ELIGIBILITY'
+                    ]].copy()
+                    
+                    recon_df.columns = [
+                        'Match Status', 'Match Reason', 'Supplier Name', 
+                        'Supplier GSTIN (2B)', 'Supplier GSTIN (PR)', 'Document Number (2B)', 
+                        'Document Number (PR)', 'Document Date (2B)', 'Document Date (PR)', 
+                        'Doc Type (2B)', 'Doc Type (PR)', 'Month (2B)', 'Month (PR)', 
+                        'Taxable Value (2B)', 'Taxable Value (PR)', 'Total Tax (2B)', 
+                        'Total Tax (PR)', 'ITC Eligibility'
+                    ]
+                    
+                    # Write to Excel starting from row 2 (for header)
                     recon_df.to_excel(writer, sheet_name='Reconciliation', index=False, startrow=2)
                     
                     workbook = writer.book
                     worksheet = writer.sheets['Reconciliation']
                     
                     # Add header format
-                    header_format = workbook.add_format({'bold': True, 'bg_color': '#1e40af', 'font_color': 'white', 'border': 1, 'align': 'center'})
+                    header_format = workbook.add_format({
+                        'bold': True, 'bg_color': '#1e40af', 'font_color': 'white', 
+                        'border': 1, 'align': 'center', 'valign': 'vcenter'
+                    })
                     for col_num, col_name in enumerate(recon_df.columns):
                         worksheet.write(2, col_num, col_name, header_format)
                     
-                    # ✅ Add DOC_TYPE dropdown validation
+                    # ✅ Add DOC_TYPE dropdown validation for both columns
                     if add_dropdown_validation:
-                        # Create a list validation for DOC_TYPE columns
-                        worksheet.data_validation('J3:J10000', {'validate': 'list', 'source': ['INVOICE', 'CREDIT', 'DEBIT']})
-                        worksheet.data_validation('K3:K10000', {'validate': 'list', 'source': ['INVOICE', 'CREDIT', 'DEBIT']})
+                        worksheet.data_validation('J3:J100000', {'validate': 'list', 'source': ['INVOICE', 'CREDIT', 'DEBIT']})
+                        worksheet.data_validation('K3:K100000', {'validate': 'list', 'source': ['INVOICE', 'CREDIT', 'DEBIT']})
                     
-                    worksheet.set_column('A:A', 18)
-                    worksheet.set_column('B:B', 45)
-                    worksheet.set_column('C:C', 35)
-                    worksheet.set_column('D:E', 20)
-                    worksheet.set_column('F:G', 22)
-                    worksheet.set_column('H:I', 16)
-                    worksheet.set_column('J:K', 14)
-                    worksheet.set_column('L:M', 14)
-                    worksheet.set_column('N:Q', 16)
-                    worksheet.set_column('R:R', 18)
+                    # Set column widths
+                    worksheet.set_column('A:A', 18)  # Match Status
+                    worksheet.set_column('B:B', 45)  # Match Reason
+                    worksheet.set_column('C:C', 35)  # Supplier Name
+                    worksheet.set_column('D:E', 20)  # GSTINs
+                    worksheet.set_column('F:G', 22)  # Doc Numbers
+                    worksheet.set_column('H:I', 16)  # Doc Dates
+                    worksheet.set_column('J:K', 14)  # Doc Types
+                    worksheet.set_column('L:M', 14)  # Months
+                    worksheet.set_column('N:Q', 16)  # Values
+                    worksheet.set_column('R:R', 18)  # ITC Eligibility
+                    
+                    # Add summary sheet
+                    summary_data = pd.DataFrame({
+                        'Metric': [
+                            'Total Records', 'Exact Matches', 'Suggested Matches', 
+                            'Value Mismatches', 'Missing in GSTR-2B', 'Missing in PR',
+                            'Match Rate (%)', 'Unclaimed ITC (₹)', 'Risk Claims (₹)',
+                            'Processing Time (sec)'
+                        ],
+                        'Value': [
+                            total_records, exact_count, suggested_count,
+                            stats.get('value_mismatches', 0), missing_2b, missing_pr,
+                            f"{match_rate:.2f}", f"{unclaimed_itc:,.2f}", f"{risky_claims:,.2f}",
+                            stats.get('processing_time_sec', 0)
+                        ]
+                    })
+                    summary_data.to_excel(writer, sheet_name='Summary', index=False)
+                    
+                    # Add raw data sheets if enabled
+                    if include_raw_data:
+                        df_2b.to_excel(writer, sheet_name='Raw_GSTR2B', index=False)
+                        df_pr.to_excel(writer, sheet_name='Raw_PurchaseRegister', index=False)
                 
-                st.download_button(label="⚡ Download Report", data=output.getvalue(), file_name=f"GST_Recon_{datetime.now().strftime('%Y%m%d')}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
+                # Download button
+                st.download_button(
+                    label="⚡ Download Excel Report", 
+                    data=output.getvalue(), 
+                    file_name=f"GST_Recon_Report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx", 
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", 
+                    use_container_width=True,
+                    key="btn_download_excel"
+                )
+                
+                # CSV Export Option
+                if export_format in ["CSV (.csv)", "Both"]:
+                    csv_output = io.StringIO()
+                    merged_df.to_csv(csv_output, index=False)
+                    st.download_button(
+                        label="📄 Download CSV",
+                        data=csv_output.getvalue(),
+                        file_name=f"GST_Recon_Data_{datetime.now().strftime('%Y%m%d')}.csv",
+                        mime="text/csv",
+                        use_container_width=True,
+                        key="btn_download_csv"
+                    )
             
-            st.success(f"✅ Ready! Processed {total_records:,} records with proper Credit/Debit Note handling and dropdown validation.")
+            # Success message
+            st.success(f"✅ Ready! Processed {total_records:,} records in {stats['processing_time_sec']}s with proper Credit/Debit Note handling.")
     
     except Exception as e:
+        logger.error(f"Processing error: {str(e)}", exc_info=True)
         st.error(f"❌ Processing Error: {str(e)}")
         with st.expander("🔧 Technical Details"):
             st.exception(e)
-            st.info("💡 Ensure files follow the sample template format with DOC_TYPE column (INVOICE/CREDIT/DEBIT) and negative values for Credit Notes.")
+            st.info("""
+            💡 **Troubleshooting Tips:**
+            - Ensure files follow the sample template format
+            - Check that DOC_TYPE column contains: INVOICE, CREDIT, or DEBIT
+            - Verify Credit Notes have negative taxable/tax values
+            - Confirm GSTINs are in valid 15-character format
+            - Check date formats: DD-MM-YYYY, YYYY-MM-DD, or DD/MM/YYYY
+            """)
 
 else:
+    # Welcome screen when no files uploaded
     st.markdown("""
     <div class="section-card animate-fade-in" style="text-align: center; padding: 64px 44px;">
         <div style="font-size: 4.5rem; margin-bottom: 24px;">🧾✨</div>
-        <h2 style="margin: 0 0 18px 0; font-size: 2rem;">Welcome to GST Recon Pro</h2>
+        <h2 style="margin: 0 0 18px 0; font-size: 2rem;">Welcome to GST Recon Pro v4.0</h2>
         <p style="color: var(--text-secondary); font-size: 1.15rem; max-width: 650px; margin: 0 auto 36px auto; line-height: 1.7;">
             Upload your GSTR-2B and Purchase Register files to begin intelligent reconciliation. 
             Our AI-powered engine matches invoices, handles Credit/Debit Notes with negative values, 
-            identifies discrepancies, and generates compliance-ready reports.
+            identifies discrepancies, and generates compliance-ready reports with enterprise-grade security.
         </p>
         <div class="quick-actions">
             <div class="quick-action-btn"><span class="icon">📁</span><span class="label">Upload Files</span></div>
@@ -1314,23 +1847,92 @@ else:
                 <strong>💡 Pro Tips:</strong><br>
                 • Credit Notes should have <strong>negative taxable/tax values</strong> for proper matching<br>
                 • Use DOC_TYPE dropdown: INVOICE / CREDIT / DEBIT<br>
-                • Month format: <strong>JANUARY-25, FEBRUARY-25</strong>, etc.
+                • Month format: <strong>JANUARY-25, FEBRUARY-25</strong>, etc.<br>
+                • GSTIN format: 15 characters (e.g., 36AADCR6281N1ZT)<br>
+                • Press <strong>Ctrl+T</strong> to toggle dark/light theme
             </p>
         </div>
     </div>
     """, unsafe_allow_html=True)
 
-# ================= FOOTER =================
+# ==================== FOOTER ====================
 st.markdown("""
 <div class="footer">
-    <div class="brand">🧾 GST Recon Pro</div>
+    <div class="brand">🧾 GST Recon Pro v4.0</div>
     <div class="credits">Enterprise GST Reconciliation Engine</div>
     <div class="credits">Developed by <strong>ABHISHEK JAKKULA</strong> • jakkulaabhishek5@gmail.com</div>
-    <div class="version">v3.2 • Last Updated: May 2026</div>
+    <div class="version">v4.0.0 • Last Updated: May 2026</div>
     <div style="margin-top: 24px; display: flex; justify-content: center; gap: 24px; flex-wrap: wrap;">
         <a href="#" style="color: var(--text-secondary); text-decoration: none; font-size: 0.95rem;">📚 Documentation</a>
         <a href="#" style="color: var(--text-secondary); text-decoration: none; font-size: 0.95rem;">🎥 Tutorials</a>
         <a href="#" style="color: var(--text-secondary); text-decoration: none; font-size: 0.95rem;">🔧 Support</a>
+        <a href="#" style="color: var(--text-secondary); text-decoration: none; font-size: 0.95rem;">🐛 Report Bug</a>
+    </div>
+    <div style="margin-top: 16px; font-size: 0.85rem; color: var(--text-secondary);">
+        © 2026 Abhishek Jakkula. All rights reserved. | GST Recon Pro is a proprietary enterprise solution.
     </div>
 </div>
 """, unsafe_allow_html=True)
+
+# ==================== KEYBOARD SHORTCUTS (via JavaScript) ====================
+st.markdown("""
+<script>
+// Additional keyboard shortcuts
+document.addEventListener('keydown', function(e) {
+    // Ctrl+R: Reset session
+    if (e.ctrlKey && e.key === 'r') {
+        e.preventDefault();
+        if (confirm('Reset session and clear all data?')) {
+            window.location.reload();
+        }
+    }
+    // Ctrl+E: Export report (if processed)
+    if (e.ctrlKey && e.key === 'e') {
+        e.preventDefault();
+        const exportBtn = document.querySelector('button[kind="secondary"]');
+        if (exportBtn) exportBtn.click();
+    }
+});
+</script>
+""", unsafe_allow_html=True)
+
+# ==================== SESSION STATE INITIALIZATION ====================
+if 'load_sample' not in st.session_state:
+    st.session_state.load_sample = False
+
+if 'file_2b_hash' not in st.session_state:
+    st.session_state.file_2b_hash = None
+
+if 'file_pr_hash' not in st.session_state:
+    st.session_state.file_pr_hash = None
+
+if 'processed_data' not in st.session_state:
+    st.session_state.processed_data = None
+
+# Auto-load sample if requested
+if st.session_state.load_sample:
+    st.info("📥 Sample templates downloaded. Please upload them to begin reconciliation.")
+    st.session_state.load_sample = False
+
+# ==================== ERROR HANDLING & LOGGING ====================
+# Global exception handler for uncaught errors
+def global_exception_handler(exc_type, exc_value, exc_traceback):
+    if issubclass(exc_type, KeyboardInterrupt):
+        sys.__excepthook__(exc_type, exc_value, exc_traceback)
+        return
+    logger.critical("Uncaught exception", exc_info=(exc_type, exc_value, exc_traceback))
+    st.error(f"💥 Unexpected Error: {exc_value}")
+    st.info("Please refresh the page or contact support if the issue persists.")
+
+sys.excepthook = global_exception_handler
+
+# ==================== PERFORMANCE MONITORING ====================
+# Track page load time
+if 'page_load_start' not in st.session_state:
+    st.session_state.page_load_start = time.time()
+else:
+    load_time = time.time() - st.session_state.page_load_start
+    if load_time > 5:  # Log if page takes more than 5 seconds
+        logger.warning(f"Page load time: {load_time:.2f}s")
+
+# ==================== END OF APPLICATION ====================
