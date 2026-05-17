@@ -1,1050 +1,1336 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import re
 import io
+from datetime import datetime, timedelta
 import plotly.express as px
-import hashlib
-import logging
-from rapidfuzz import process, fuzz
-from datetime import datetime
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+import re
+import warnings
+warnings.filterwarnings('ignore')
 
-# ============ CONFIGURATION & CONSTANTS ============
-STANDARD_TDS_RATES = {1.0, 2.0, 5.0, 10.0, 20.0, 30.0}
-TOLERANCE_DEFAULT = 10
-FUZZY_CUTOFF_DEFAULT = 70
-MAX_FILE_SIZE_MB = 50
-CACHE_TTL_SECONDS = 3600
-PREVIEW_LIMIT_DEFAULT = 50
+# ================= CONFIG & UI SETUP =================
+st.set_page_config(
+    page_title="✨ GST Recon Pro", 
+    page_icon="🧾",
+    layout="wide", 
+    initial_sidebar_state="expanded",
+    menu_items={
+        'Get Help': 'mailto:jakkulaabhishek5@gmail.com',
+        'Report a bug': "https://github.com/abhishekjakkula/gst-recon-pro/issues",
+        'About': "# GST Recon Pro v3.2\nEnterprise GST Reconciliation Engine"
+    }
+)
 
-# ============ LOGGING SETUP ============
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
-
-# ============ STREAMLIT CONFIG ============
-st.set_page_config(page_title="26AS Enterprise Reconciliation", layout="wide", page_icon="📊")
-
-# ============ ROBUST DECODING FUNCTION ============
-def safe_decode(file_bytes: bytes) -> str:
-    """Try multiple encodings to safely decode file content."""
-    encodings = ['utf-8', 'latin-1', 'cp1252', 'iso-8859-1']
-    for enc in encodings:
-        try:
-            return file_bytes.decode(enc)
-            logger.info(f"Successfully decoded file using {enc}")
-        except UnicodeDecodeError:
-            continue
-    logger.warning("All encodings failed, using utf-8 with replace")
-    return file_bytes.decode('utf-8', errors='replace')
-
-# ============ HASHING FOR CACHE KEYS ============
-def hash_bytes(data: bytes) -> str:
-    """Generate SHA256 hash for bytes to use as cache key."""
-    return hashlib.sha256(data).hexdigest()
-
-# ============ GLASSMORPHIC UI CSS ============
+# ================= ENHANCED THEME-ADAPTIVE CSS =================
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap');
 
-:root {
-    --bg-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    --card-bg: rgba(255, 255, 255, 0.25);
-    --card-border: rgba(255, 255, 255, 0.18);
-    --text-primary: #2d3748;
-    --text-secondary: #4a5568;
-    --accent: #667eea;
-    --accent-light: #9f7aea;
-    --success: #10b981;
-    --warning: #f59e0b;
-    --danger: #ef4444;
-}
-
-@media (prefers-color-scheme: dark) {
     :root {
-        --card-bg: rgba(17, 25, 40, 0.75);
-        --card-border: rgba(255, 255, 255, 0.1);
-        --text-primary: #f7fafc;
-        --text-secondary: #e2e8f0;
-        --accent: #9f7aea;
-        --accent-light: #b794f4;
+        --primary: #6366f1;
+        --primary-dark: #4f46e5;
+        --secondary: #8b5cf6;
+        --accent: #06b6d4;
+        --success: #10b981;
+        --warning: #f59e0b;
+        --error: #ef4444;
+        --info: #3b82f6;
+        --bg-light: #f8fafc;
+        --bg-card: #ffffff;
+        --text-primary: #0f172a;
+        --text-secondary: #64748b;
+        --border-light: #e2e8f0;
+        --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+        --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+        --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+        --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+        --radius-sm: 8px;
+        --radius-md: 12px;
+        --radius-lg: 16px;
+        --radius-xl: 24px;
     }
+
+    [data-theme="dark"] {
+        --bg-light: #0f172a;
+        --bg-card: #1e293b;
+        --text-primary: #f1f5f9;
+        --text-secondary: #94a3b8;
+        --border-light: #334155;
+    }
+
+    html, body, [class*="css"] {
+        font-family: 'Inter', sans-serif;
+        color: var(--text-primary);
+    }
+
     .stApp {
-        background: #0f172a;
+        background: linear-gradient(135deg, var(--bg-light) 0%, #f1f5f9 100%);
+        background-attachment: fixed;
     }
-}
-
-@media (prefers-reduced-motion: reduce) {
-    .stApp {
-        animation: none !important;
-        background: var(--bg-gradient) !important;
+    [data-theme="dark"] .stApp {
+        background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
     }
-    .glass-card {
-        transition: none !important;
+
+    [data-testid="stSidebar"] {
+        background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
+        border-right: 1px solid rgba(255,255,255,0.1);
+        box-shadow: var(--shadow-lg);
     }
-    .glass-card:hover {
-        transform: none !important;
+
+    .main-header {
+        text-align: center;
+        padding: 2.5rem 1rem;
+        margin-bottom: 2rem;
+        background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 50%, var(--accent) 100%);
+        border-radius: var(--radius-xl);
+        box-shadow: var(--shadow-xl);
+        position: relative;
+        overflow: hidden;
     }
-}
+    .main-header::before {
+        content: '';
+        position: absolute;
+        top: -50%;
+        left: -50%;
+        width: 200%;
+        height: 200%;
+        background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+        animation: shimmer 3s infinite;
+    }
+    @keyframes shimmer {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+    .main-header h1 {
+        font-weight: 900 !important;
+        font-size: 3.2rem !important;
+        background: linear-gradient(90deg, #fff, #e0e7ff, #fff);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        margin: 0 !important;
+        text-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        position: relative;
+        z-index: 1;
+    }
+    .main-header .subtitle {
+        font-size: 1.25rem;
+        color: rgba(255,255,255,0.95);
+        margin: 1rem 0 0 0;
+        line-height: 1.6;
+        position: relative;
+        z-index: 1;
+        max-width: 800px;
+        margin-left: auto;
+        margin-right: auto;
+    }
 
-html, body, [class*="css"] {
-    font-family: 'Inter', sans-serif;
-}
+    .metric-card {
+        background: var(--bg-card);
+        border-radius: var(--radius-lg);
+        padding: 28px 24px;
+        border: 1px solid var(--border-light);
+        box-shadow: var(--shadow-md);
+        transition: all 0.3s ease;
+        position: relative;
+        overflow: hidden;
+    }
+    .metric-card::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 4px;
+        background: linear-gradient(90deg, var(--primary), var(--secondary));
+    }
+    .metric-card:hover {
+        transform: translateY(-4px);
+        box-shadow: var(--shadow-xl);
+        border-color: var(--primary);
+    }
+    .metric-card .metric-value {
+        font-size: 2.4rem;
+        font-weight: 800;
+        color: var(--text-primary);
+        line-height: 1;
+        margin: 10px 0;
+    }
+    .metric-card .metric-label {
+        font-size: 0.95rem;
+        color: var(--text-secondary);
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    .metric-card .metric-delta {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 0.9rem;
+        font-weight: 600;
+        padding: 6px 14px;
+        border-radius: 20px;
+        margin-top: 10px;
+    }
+    .metric-delta.positive { background: rgba(16, 185, 129, 0.15); color: var(--success); }
+    .metric-delta.negative { background: rgba(239, 68, 68, 0.15); color: var(--error); }
+    .metric-delta.neutral { background: rgba(100, 116, 139, 0.15); color: var(--text-secondary); }
 
-.stApp {
-    background: linear-gradient(-45deg, #ee7752, #e73c7e, #23a6d5, #23d5ab);
-    background-size: 400% 400%;
-    animation: gradient 15s ease infinite;
-    min-height: 100vh;
-}
+    .insight-card {
+        background: var(--bg-card);
+        border-radius: var(--radius-lg);
+        padding: 22px 26px;
+        margin-bottom: 16px;
+        border-left: 5px solid var(--primary);
+        box-shadow: var(--shadow-md);
+        border: 1px solid var(--border-light);
+        transition: all 0.2s ease;
+    }
+    .insight-card:hover {
+        box-shadow: var(--shadow-lg);
+        transform: translateX(4px);
+    }
+    .insight-card.warning {
+        border-left-color: var(--warning);
+        background: linear-gradient(135deg, rgba(245, 158, 11, 0.08), transparent);
+    }
+    .insight-card.success {
+        border-left-color: var(--success);
+        background: linear-gradient(135deg, rgba(16, 185, 129, 0.08), transparent);
+    }
+    .insight-card.error {
+        border-left-color: var(--error);
+        background: linear-gradient(135deg, rgba(239, 68, 68, 0.08), transparent);
+    }
+    .insight-card .insight-title {
+        font-weight: 700;
+        font-size: 1.15rem;
+        color: var(--text-primary);
+        margin-bottom: 10px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    .insight-card .insight-message {
+        color: var(--text-secondary);
+        line-height: 1.6;
+        font-size: 0.95rem;
+    }
 
-@keyframes gradient {
-    0% { background-position: 0% 50%; }
-    50% { background-position: 100% 50%; }
-    100% { background-position: 0% 50%; }
-}
+    .section-card {
+        background: var(--bg-card);
+        border-radius: var(--radius-lg);
+        padding: 32px;
+        margin-bottom: 24px;
+        box-shadow: var(--shadow-md);
+        border: 1px solid var(--border-light);
+    }
+    .section-card h3 {
+        font-weight: 700;
+        color: var(--text-primary);
+        margin-bottom: 24px;
+        padding-bottom: 14px;
+        border-bottom: 2px solid var(--border-light);
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-size: 1.3rem;
+    }
+    .section-card h3 .icon { font-size: 1.5rem; }
 
-.glass-card {
-    background: var(--card-bg);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    border-radius: 20px;
-    border: 1px solid var(--card-border);
-    padding: 2rem;
-    margin-bottom: 2rem;
-    box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
-    transition: transform 0.3s ease, box-shadow 0.3s ease;
-}
+    .stButton>button {
+        background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+        color: white !important;
+        border-radius: var(--radius-md);
+        padding: 14px 32px;
+        font-weight: 600;
+        border: none;
+        transition: all 0.3s ease;
+        box-shadow: var(--shadow-md);
+        position: relative;
+        overflow: hidden;
+        font-size: 1rem;
+    }
+    .stButton>button::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+        transition: left 0.5s;
+    }
+    .stButton>button:hover::before { left: 100%; }
+    .stButton>button:hover {
+        transform: translateY(-2px);
+        box-shadow: var(--shadow-lg);
+        background: linear-gradient(135deg, var(--primary-dark), #4338ca);
+    }
 
-.glass-card:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 12px 40px 0 rgba(31, 38, 135, 0.5);
-}
+    [data-testid="stDataFrame"] {
+        border-radius: var(--radius-lg);
+        overflow: hidden;
+        box-shadow: var(--shadow-md);
+        border: 1px solid var(--border-light);
+    }
+    [data-testid="stDataFrame"] th {
+        background: linear-gradient(135deg, var(--primary), var(--secondary));
+        color: white !important;
+        font-weight: 600;
+        padding: 14px 18px;
+        text-transform: uppercase;
+        font-size: 0.85rem;
+        letter-spacing: 0.5px;
+    }
+    [data-testid="stDataFrame"] td {
+        padding: 12px 18px;
+        border-bottom: 1px solid var(--border-light);
+        font-size: 0.9rem;
+    }
+    [data-testid="stDataFrame"] tr:hover {
+        background: rgba(99, 102, 241, 0.05);
+    }
 
-.header-title {
-    font-weight: 800;
-    font-size: 3.5rem;
-    text-align: center;
-    background: linear-gradient(90deg, #fff, #e0e7ff);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    text-shadow: 0 2px 10px rgba(0,0,0,0.2);
-    line-height: 1.2;
-    letter-spacing: -0.02em;
-}
+    .status-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 14px;
+        border-radius: 20px;
+        font-size: 0.85rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    .status-exact { background: rgba(16, 185, 129, 0.15); color: #065f46; }
+    .status-suggested { background: rgba(6, 182, 212, 0.15); color: #0e7490; }
+    .status-mismatch { background: rgba(245, 158, 11, 0.15); color: #92400e; }
+    .status-missing-2b { background: rgba(239, 68, 68, 0.15); color: #991b1b; }
+    .status-missing-pr { background: rgba(139, 92, 246, 0.15); color: #5b21b6; }
 
-.header-sub {
-    font-size: 1.2rem;
-    font-weight: 600;
-    text-align: center;
-    color: var(--text-primary);
-    opacity: 0.9;
-    margin-top: 6px;
-}
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 12px;
+        background: rgba(255,255,255,0.6);
+        padding: 10px;
+        border-radius: var(--radius-lg);
+        backdrop-filter: blur(8px);
+        border: 1px solid var(--border-light);
+    }
+    [data-theme="dark"] .stTabs [data-baseweb="tab-list"] {
+        background: rgba(30, 41, 59, 0.6);
+    }
+    .stTabs [data-baseweb="tab"] {
+        border-radius: var(--radius-md);
+        padding: 14px 28px;
+        font-weight: 600;
+        transition: all 0.2s ease;
+        color: var(--text-secondary);
+        font-size: 0.95rem;
+    }
+    .stTabs [aria-selected="true"] {
+        background: linear-gradient(135deg, var(--primary), var(--secondary));
+        color: white !important;
+        box-shadow: var(--shadow-md);
+        transform: translateY(-2px);
+    }
 
-.dev-credit {
-    font-size: 1rem;
-    text-align: center;
-    margin-top: 8px;
-    color: var(--text-secondary);
-}
+    .progress-container {
+        background: var(--bg-card);
+        border-radius: var(--radius-lg);
+        padding: 24px;
+        margin: 20px 0;
+        border: 1px solid var(--border-light);
+        box-shadow: var(--shadow-md);
+    }
+    .progress-bar {
+        height: 10px;
+        background: var(--border-light);
+        border-radius: 5px;
+        overflow: hidden;
+        margin: 12px 0;
+    }
+    .progress-fill {
+        height: 100%;
+        background: linear-gradient(90deg, var(--primary), var(--accent));
+        border-radius: 5px;
+        transition: width 0.3s ease;
+    }
 
-.dev-credit b {
-    background: linear-gradient(90deg, var(--accent), var(--accent-light));
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-}
+    .footer {
+        text-align: center;
+        padding: 36px 24px;
+        margin-top: 60px;
+        background: linear-gradient(135deg, var(--bg-card), var(--bg-light));
+        border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+        border-top: 1px solid var(--border-light);
+    }
+    .footer .brand {
+        font-weight: 800;
+        font-size: 1.3rem;
+        background: linear-gradient(90deg, var(--primary), var(--secondary));
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+    }
+    .footer .credits {
+        color: var(--text-secondary);
+        font-size: 0.95rem;
+        margin: 10px 0;
+    }
+    .footer .version {
+        display: inline-block;
+        background: var(--border-light);
+        padding: 6px 16px;
+        border-radius: 20px;
+        font-size: 0.85rem;
+        color: var(--text-secondary);
+        margin-top: 16px;
+    }
 
-.zone {
-    background: var(--card-bg);
-    backdrop-filter: blur(10px);
-    padding: 16px;
-    border-radius: 50px;
-    border: 1px solid var(--card-border);
-    text-align: center;
-    font-weight: 600;
-    color: var(--text-primary);
-    margin-bottom: 18px;
-    font-size: 1.1rem;
-    letter-spacing: 0.5px;
-}
+    .quick-actions {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 16px;
+        margin: 24px 0;
+    }
+    .quick-action-btn {
+        background: var(--bg-card);
+        border: 2px solid var(--border-light);
+        border-radius: var(--radius-md);
+        padding: 20px;
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        text-decoration: none;
+        color: var(--text-primary);
+    }
+    .quick-action-btn:hover {
+        border-color: var(--primary);
+        background: rgba(99, 102, 241, 0.05);
+        transform: translateY(-3px);
+        box-shadow: var(--shadow-md);
+    }
+    .quick-action-btn .icon { font-size: 2rem; margin-bottom: 10px; display: block; }
+    .quick-action-btn .label { font-weight: 600; font-size: 0.95rem; }
 
-[data-testid="stFileUploader"] {
-    background: var(--card-bg) !important;
-    backdrop-filter: blur(10px);
-    border-radius: 15px !important;
-    border: 2px dashed var(--accent-light) !important;
-    padding: 1.2em !important;
-    transition: all 0.3s ease;
-}
+    @keyframes fadeInUp {
+        from { opacity: 0; transform: translateY(20px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    .animate-fade-in { animation: fadeInUp 0.5s ease forwards; }
+    .animate-fade-in:nth-child(1) { animation-delay: 0.1s; }
+    .animate-fade-in:nth-child(2) { animation-delay: 0.2s; }
+    .animate-fade-in:nth-child(3) { animation-delay: 0.3s; }
+    .animate-fade-in:nth-child(4) { animation-delay: 0.4s; }
 
-[data-testid="stFileUploader"]:hover {
-    border-color: var(--accent) !important;
-    background: rgba(255,255,255,0.15) !important;
-}
+    .theme-toggle {
+        position: fixed;
+        bottom: 28px;
+        right: 28px;
+        z-index: 1000;
+    }
+    .theme-toggle button {
+        background: var(--bg-card);
+        border: 2px solid var(--border-light);
+        border-radius: 50%;
+        width: 52px;
+        height: 52px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.3rem;
+        cursor: pointer;
+        box-shadow: var(--shadow-lg);
+        transition: all 0.3s ease;
+    }
+    .theme-toggle button:hover {
+        transform: scale(1.1);
+        border-color: var(--primary);
+    }
 
-.stButton>button,
-.stDownloadButton>button {
-    background: linear-gradient(90deg, var(--accent), var(--accent-light));
-    color: white !important;
-    border-radius: 50px;
-    padding: 12px 30px;
-    font-weight: 600;
-    border: none;
-    transition: all 0.3s ease;
-    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    width: 100%;
-}
+    .doc-type-badge {
+        display: inline-block;
+        padding: 4px 12px;
+        border-radius: 6px;
+        font-size: 0.85rem;
+        font-weight: 600;
+        margin: 2px;
+    }
+    .doc-type-invoice { background: rgba(16, 185, 129, 0.15); color: #065f46; }
+    .doc-type-credit { background: rgba(239, 68, 68, 0.15); color: #991b1b; }
+    .doc-type-debit { background: rgba(245, 158, 11, 0.15); color: #92400e; }
 
-.stButton>button:hover,
-.stDownloadButton>button:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 8px 25px rgba(102, 126, 234, 0.6);
-}
-
-[data-testid="stMetric"] {
-    background: var(--card-bg);
-    backdrop-filter: blur(10px);
-    border-radius: 20px;
-    padding: 20px;
-    border: 1px solid var(--card-border);
-    transition: transform 0.3s ease;
-}
-
-[data-testid="stMetric"]:hover {
-    transform: scale(1.02);
-}
-
-[data-testid="stMetricValue"] {
-    font-weight: 800;
-    font-size: 1.8rem;
-    color: var(--text-primary);
-}
-
-[data-testid="stMetricLabel"] {
-    color: var(--text-secondary);
-}
-
-.alert-box-red {
-    background: rgba(239, 68, 68, 0.15);
-    backdrop-filter: blur(10px);
-    border-left: 5px solid var(--danger);
-    padding: 16px;
-    border-radius: 12px;
-    margin-bottom: 12px;
-    color: var(--text-primary);
-}
-
-.alert-box-yellow {
-    background: rgba(245, 158, 11, 0.15);
-    backdrop-filter: blur(10px);
-    border-left: 5px solid var(--warning);
-    padding: 16px;
-    border-radius: 12px;
-    margin-bottom: 12px;
-    color: var(--text-primary);
-}
-
-.alert-box-blue {
-    background: rgba(37, 99, 235, 0.15);
-    backdrop-filter: blur(10px);
-    border-left: 5px solid var(--accent);
-    padding: 16px;
-    border-radius: 12px;
-    margin-bottom: 12px;
-    color: var(--text-primary);
-}
-
-.alert-box-green {
-    background: rgba(16, 185, 129, 0.15);
-    backdrop-filter: blur(10px);
-    border-left: 5px solid var(--success);
-    padding: 16px;
-    border-radius: 12px;
-    margin-bottom: 12px;
-    color: var(--text-primary);
-}
-
-[data-testid="stDataFrame"] {
-    background: transparent;
-}
-
-[data-testid="stDataFrame"] table {
-    background: var(--card-bg);
-    backdrop-filter: blur(5px);
-    border-radius: 15px;
-    overflow: hidden;
-}
-
-[data-testid="stDataFrame"] th {
-    background: var(--accent) !important;
-    color: white !important;
-    font-weight: 600;
-}
-
-[data-testid="stDataFrame"] td {
-    color: var(--text-primary);
-}
-
-.streamlit-expanderHeader {
-    background: var(--card-bg);
-    backdrop-filter: blur(10px);
-    border-radius: 15px;
-    font-weight: 600;
-    color: var(--text-primary);
-}
-
-.streamlit-expanderContent {
-    background: var(--card-bg);
-    backdrop-filter: blur(10px);
-    border-radius: 0 0 15px 15px;
-    border-top: none;
-}
-
-.css-1d391kg, .css-12oz5g7 {
-    background: var(--card-bg) !important;
-    backdrop-filter: blur(10px);
-}
-
-footer {visibility: hidden;}
-
-/* Progress bar styling */
-.stProgress > div > div {
-    background: linear-gradient(90deg, var(--accent), var(--accent-light));
-}
+    @media (max-width: 768px) {
+        .main-header h1 { font-size: 2.2rem !important; }
+        .main-header .subtitle { font-size: 1rem; }
+        .metric-card .metric-value { font-size: 2rem; }
+        .section-card { padding: 24px; }
+    }
 </style>
+
+<!-- Theme Toggle Script -->
+<script>
+const savedTheme = localStorage.getItem('gst-recon-theme');
+const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+const initialTheme = savedTheme || (systemPrefersDark ? 'dark' : 'light');
+if (initialTheme === 'dark') {
+    document.documentElement.setAttribute('data-theme', 'dark');
+}
+function toggleTheme() {
+    const currentTheme = document.documentElement.getAttribute('data-theme');
+    const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', newTheme);
+    localStorage.setItem('gst-recon-theme', newTheme);
+}
+</script>
 """, unsafe_allow_html=True)
 
-st.markdown('<div class="glass-card">', unsafe_allow_html=True)
-
-# ============ HEADER ============
+# ================= THEME TOGGLE BUTTON =================
 st.markdown("""
-<div style="text-align: center; margin-bottom: 30px;">
-    <div class="header-title">26AS Enterprise Reconciliation</div>
-    <div class="header-sub">RapidFuzz AI | Smart Memory | TDS Rate Auditor</div>
-    <div class="dev-credit">Developed by <b>Abhishek Jakkula</b></div>
+<div class="theme-toggle">
+    <button onclick="toggleTheme()" title="Toggle Dark/Light Mode">🌓</button>
 </div>
 """, unsafe_allow_html=True)
 
-# ============ SIDEBAR SETTINGS ============
+# ================= SIDEBAR - ENHANCED =================
 with st.sidebar:
-    st.markdown("### ⚙️ Engine Settings")
-    tolerance = st.number_input("Mismatch Tolerance (₹)", min_value=0, value=TOLERANCE_DEFAULT, step=1)
-    fuzzy_cutoff = st.slider("Fuzzy Match Score Cutoff (%)", min_value=50, max_value=95, value=FUZZY_CUTOFF_DEFAULT, step=5)
+    st.markdown("""
+    <div style="text-align: center; padding: 24px 0; border-bottom: 1px solid rgba(255,255,255,0.1); margin-bottom: 28px;">
+        <div style="font-size: 3rem; margin-bottom: 10px;">🧾</div>
+        <h3 style="margin: 0; color: #fff; font-size: 1.4rem;">GST Recon Pro</h3>
+        <p style="margin: 6px 0 0 0; color: #94a3b8; font-size: 0.9rem;">v3.2 • Enterprise Edition</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    st.markdown("### ⚡ Quick Actions")
+    col_q1, col_q2 = st.columns(2)
+    with col_q1:
+        if st.button("📥 Load Sample", use_container_width=True):
+            st.session_state.load_sample = True
+    with col_q2:
+        if st.button("🔄 Reset", use_container_width=True):
+            for key in list(st.session_state.keys()):
+                if 'upload' in key or 'file' in key:
+                    del st.session_state[key]
+            st.rerun()
     
     st.markdown("---")
-    st.markdown("### 🧠 AI Smart Memory")
-    st.info("Upload a previously saved Mapping Dictionary to auto-match custom vendor names.")
-    mapping_file = st.file_uploader("Upload Dictionary (CSV)", type=['csv'])
-
-    known_mappings = {}
-    if mapping_file:
-        try:
-            map_df = pd.read_csv(mapping_file)
-            if 'TAN of Deductor' in map_df.columns and 'Mapped Books Party' in map_df.columns:
-                known_mappings = dict(zip(
-                    map_df['TAN of Deductor'].astype(str).str.strip().str.upper(),
-                    map_df['Mapped Books Party'].astype(str).str.strip().str.upper()
-                ))
-                st.success(f"✅ Loaded {len(known_mappings)} custom mappings!")
-                logger.info(f"Loaded {len(known_mappings)} mappings from dictionary")
-        except Exception as e:
-            st.error(f"❌ Invalid dictionary format: {str(e)}")
-            logger.error(f"Failed to load mapping file: {e}")
-
-# ============ SAMPLE TEMPLATES ============
-st.markdown('<div class="zone">📄 Step 1: Upload original TRACES Form 26AS (.txt) and Books Excel</div>', unsafe_allow_html=True)
-
-sample_books = pd.DataFrame({
-    "Party Name": ["ABC Pvt Ltd", "XYZ Corp"],
-    "TAN": ["HYDA00000A", ""],
-    "Books Amount": [100000, 50000],
-    "Books TDS": [10000, 5000]
-})
-books_buf = io.BytesIO()
-sample_books.to_excel(books_buf, index=False, engine='openpyxl')
-books_buf.seek(0)
-
-sample_dict = pd.DataFrame({
-    "TAN of Deductor": ["HYDA00000A"],
-    "Mapped Books Party": ["ABC Pvt Ltd"]
-})
-dict_csv = sample_dict.to_csv(index=False).encode('utf-8')
-
-col_t1, col_t2 = st.columns(2)
-with col_t1:
-    st.download_button("⬇ Download Sample Books Excel", books_buf, "Sample_Books.xlsx", use_container_width=True)
-with col_t2:
-    st.download_button("⬇ Download Sample Mapping Dictionary", dict_csv, "Sample_Mapping.csv", mime="text/csv", use_container_width=True)
-
-st.markdown("<br>", unsafe_allow_html=True)
-
-# ============ FILE UPLOAD WITH VALIDATION ============
-col_txt, col_exc = st.columns(2)
-with col_txt:
-    txt_file = st.file_uploader("Upload TRACES 26AS TEXT file", type=["txt"])
-with col_exc:
-    books_file = st.file_uploader("Upload Books Excel", type=["xlsx", "xls"])
-
-# File size validation
-if txt_file and txt_file.size > MAX_FILE_SIZE_MB * 1024 * 1024:
-    st.error(f"❌ 26AS file too large! Maximum allowed: {MAX_FILE_SIZE_MB}MB")
-    st.stop()
-if books_file and books_file.size > MAX_FILE_SIZE_MB * 1024 * 1024:
-    st.error(f"❌ Books file too large! Maximum allowed: {MAX_FILE_SIZE_MB}MB")
-    st.stop()
-
-# Extract metadata from 26AS file
-extracted_pan = "Unknown"
-extracted_ay = "Unknown"
-extracted_fy = "Unknown"
-
-if txt_file:
-    raw_text = safe_decode(txt_file.getvalue())
-
-    patterns = [
-        r'\d{2}-\d{2}-\d{4}\^([A-Z]{5}\d{4}[A-Z])\^[^\^]*\^(\d{4}-\d{4})\^(\d{4}-\d{4})\^?',
-        r'PAN[:\s]*([A-Z]{5}\d{4}[A-Z])',
-        r'Financial\s+Year[:\s]*(\d{4}-\d{4})',
-        r'Assessment\s+Year[:\s]*(\d{4}-\d{4})'
-    ]
-
-    for pat in patterns:
-        match = re.search(pat, raw_text, re.IGNORECASE)
-        if match:
-            groups = match.groups()
-            if len(groups) == 1:
-                grp = groups[0]
-                if re.fullmatch(r'[A-Z]{5}\d{4}[A-Z]', grp):
-                    extracted_pan = grp
-                elif re.fullmatch(r'\d{4}-\d{4}', grp):
-                    if extracted_fy == "Unknown":
-                        extracted_fy = grp
-                    else:
-                        extracted_ay = grp
-            else:
-                extracted_pan, extracted_fy, extracted_ay = groups[0], groups[1], groups[2]
-            break
-
-    if extracted_pan == "Unknown":
-        pan_match = re.search(r'([A-Z]{5}\d{4}[A-Z])', raw_text)
-        if pan_match:
-            extracted_pan = pan_match.group(1)
-
-    st.markdown(f"""
-    <div class="alert-box-green" style="text-align:center;">
-        <b>📌 Data Detected:</b> You are reconciling PAN <b>{extracted_pan}</b> for Financial Year <b>{extracted_fy}</b> (AY {extracted_ay}). Please ensure your Books match this period!
+    st.markdown("### ⚙️ Engine Settings")
+    
+    with st.expander("🎯 Matching Parameters", expanded=True):
+        tolerance = st.number_input("Tax/Taxable Tolerance (₹)", min_value=0, max_value=10000, value=20, step=1)
+        # ✅ UPDATED: Date Tolerance max changed to 365 days
+        date_tolerance = st.number_input("Date Tolerance (Days)", min_value=0, max_value=365, value=7, step=1, 
+                                         help="Maximum date difference for suggested matches (up to 365 days)")
+    
+    with st.expander("📋 Processing Options"):
+        include_reverse_charge = st.checkbox("Include Reverse Charge", value=True)
+        auto_claim_itc = st.checkbox("Auto-claim ITC for Exact", value=True)
+        fuzzy_doc_matching = st.checkbox("Fuzzy Document Matching", value=True)
+        handle_cdn_negative = st.checkbox("Treat Credit Notes as Negative Values", value=True, 
+                                         help="Credit notes will have negative taxable/tax values for proper matching")
+    
+    with st.expander("📤 Export Preferences"):
+        include_charts = st.checkbox("Include Charts", value=True)
+        include_raw_data = st.checkbox("Include Raw Data", value=True)
+        max_rows = st.number_input("Max Excel Rows", min_value=1000, max_value=100000, value=15000, step=1000)
+        # ✅ NEW: Add dropdown validation option
+        add_dropdown_validation = st.checkbox("Add DOC_TYPE Dropdown in Excel", value=True,
+                                             help="Add data validation dropdown for DOC_TYPE column (INVOICE/CREDIT/DEBIT)")
+    
+    st.markdown("---")
+    with st.expander("❓ Help"):
+        st.markdown("""
+        **📚 Quick Guide**
+        - Upload GSTR-2B & Purchase Register files
+        - Configure matching tolerance in sidebar
+        - Review dashboard insights & charts
+        - Export comprehensive Excel report
+        
+        **🔧 Support**
+        - Email: jakkulaabhishek5@gmail.com
+        - Response: < 24 hours
+        
+        **💡 Tips**
+        - Use sample templates for correct format
+        - Credit Notes should have negative values
+        - Month format: JANUARY-25, FEBRUARY-25
+        """)
+    
+    st.markdown("---")
+    st.markdown("### 🟢 System Status")
+    st.markdown("""
+    <div style="font-size: 0.9rem; color: #94a3b8;">
+        <div style="display: flex; justify-content: space-between; margin: 6px 0;">
+            <span>Engine:</span><span style="color: #10b981;">● Online</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; margin: 6px 0;">
+            <span>Matching AI:</span><span style="color: #10b981;">● Active</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; margin: 6px 0;">
+            <span>Export Service:</span><span style="color: #10b981;">● Ready</span>
+        </div>
     </div>
     """, unsafe_allow_html=True)
 
-st.markdown("<br>", unsafe_allow_html=True)
-
-# ============ PREVIEW MODE OPTION ============
-preview_mode = st.checkbox("🔍 Preview Mode (Process first 50 records only)", value=False)
-if preview_mode:
-    st.info(f"⚡ Preview mode enabled: Only first {PREVIEW_LIMIT_DEFAULT} records will be processed for faster testing")
-
-# ============ RUN BUTTON ============
-col_b1, col_b2, col_b3 = st.columns([1, 2, 1])
-with col_b2:
-    run_engine = st.button("🚀 RUN ENTERPRISE ENGINE", use_container_width=True, type="primary")
-
-# ============ EXTRACTION FUNCTION (CACHED) ============
-@st.cache_data(ttl=CACHE_TTL_SECONDS, show_spinner="🔍 Parsing 26AS file...")
-def extract_26as_detailed_cached(content_hash: str, content: str):
-    """
-    Extract transaction-level details from 26AS PART-I.
-    Returns DataFrame with columns for reconciliation.
-    """
-    logger.info(f"Starting 26AS extraction (hash: {content_hash[:16]}...)")
-    lines = content.splitlines()
-    transactions = []
-    current_name = None
-    current_tan = None
-    in_part1 = False
-
-    # Find start of PART-I
-    part1_start = -1
-    for i, line in enumerate(lines):
-        if "PART-I - Details of Tax Deducted at Source" in line:
-            part1_start = i
-            break
-    
-    if part1_start == -1:
-        logger.warning("PART-I section not found in 26AS file")
-        return pd.DataFrame()
-
-    # Process lines from part1_start onward
-    i = part1_start + 1
-    while i < len(lines):
-        line = lines[i]
-        
-        # Stop when we hit another PART section
-        if line.startswith("^PART-") and "PART-I" not in line:
-            break
-
-        if not line.strip():
-            i += 1
-            continue
-
-        parts = [p.strip() for p in line.split("^") if p.strip()]
-        if not parts:
-            i += 1
-            continue
-
-        # Check if it's a summary line
-        is_summary = (len(parts) >= 3 and
-                      re.fullmatch(r'\d+', parts[0]) and
-                      re.fullmatch(r'[A-Z]{4}[0-9]{5}[A-Z]', parts[2]))
-        
-        if is_summary:
-            current_name = parts[1]
-            current_tan = parts[2]
-            i += 2  # Skip header line after summary
-            continue
-
-        # Process transaction line
-        if current_name and current_tan and len(parts) >= 9:
-            if (re.fullmatch(r'\d+', parts[0]) and re.fullmatch(r'\d+[A-Z]+', parts[1])):
-                try:
-                    trans = {
-                        "Sl. No.": int(parts[0]),
-                        "Section": parts[1],
-                        "Name of Deductor": current_name,
-                        "TAN of Deductor": current_tan,
-                        "Amount paid/credited": float(parts[6].replace(",", "")),
-                        "Date of Payment/Credit": parts[2],
-                        "Total tax deducted": float(parts[7].replace(",", "")),
-                        "Amount claimed for this year": 0.0,
-                        "C/F Tax": 0.0
-                    }
-                    transactions.append(trans)
-                except (ValueError, IndexError) as e:
-                    logger.debug(f"Skipped malformed transaction line: {e}")
-        i += 1
-
-    df = pd.DataFrame(transactions)
-    logger.info(f"Extracted {len(df)} transactions from 26AS")
-    return df
-
-# ============ RECONCILIATION ENGINE (CACHED) ============
-@st.cache_data(ttl=CACHE_TTL_SECONDS, show_spinner="🔄 Running reconciliation engine...")
-def run_reconciliation_cached(
-    txt_hash: str, books_hash: str, tolerance: float, 
-    fuzzy_cutoff: int, mapping_hash: str, preview: bool
-):
-    """Cached reconciliation function with hash-based cache keys."""
-    logger.info("Starting reconciliation process")
-    
-    # Re-extract 26AS data (will use cache)
-    raw_26as_detailed = extract_26as_detailed_cached(txt_hash, safe_decode(txt_file.getvalue()))
-    
-    if raw_26as_detailed.empty:
-        logger.error("No transaction data found in 26AS")
-        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
-
-    # Preview mode limit
-    if preview and len(raw_26as_detailed) > PREVIEW_LIMIT_DEFAULT:
-        raw_26as_detailed = raw_26as_detailed.head(PREVIEW_LIMIT_DEFAULT)
-        logger.info(f"Preview mode: Limited to {PREVIEW_LIMIT_DEFAULT} records")
-
-    # 1. Section-wise aggregated 26AS
-    agg_26as_section = raw_26as_detailed.groupby(
-        ['TAN of Deductor', 'Name of Deductor', 'Section'], as_index=False
-    ).agg({
-        'Amount paid/credited': 'sum',
-        'Total tax deducted': 'sum'
-    }).rename(columns={
-        'Amount paid/credited': 'Total Amount Paid / Credited',
-        'Total tax deducted': 'Total TDS Deposited'
-    })
-
-    # Build TAN to sections lookup
-    tan_to_sections = agg_26as_section.groupby('TAN of Deductor')['Section'].agg(
-        lambda x: ','.join(sorted(set(x)))
-    ).to_dict()
-
-    # 2. Deductor-level aggregated 26AS
-    agg_26as_deductor = agg_26as_section.groupby(
-        ['TAN of Deductor', 'Name of Deductor'], as_index=False
-    ).agg({
-        'Total Amount Paid / Credited': 'sum',
-        'Total TDS Deposited': 'sum'
-    })
-
-    # Load and validate books
-    try:
-        books = pd.read_excel(io.BytesIO(books_file.getvalue()))
-    except Exception as e:
-        logger.error(f"Failed to read books file: {e}")
-        raise
-
-    REQUIRED_BOOKS_COLS = ["Party Name", "Books Amount", "Books TDS"]
-    missing_cols = [col for col in REQUIRED_BOOKS_COLS if col not in books.columns]
-    if missing_cols:
-        logger.error(f"Books file missing columns: {missing_cols}")
-        st.error(f"❌ Books file missing required columns: {missing_cols}")
-        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
-
-    # Ensure TAN column exists
-    if "TAN" not in books.columns:
-        books["TAN"] = ""
-    
-    # Clean and aggregate books data
-    books["TAN"] = books["TAN"].fillna("").astype(str).str.strip().str.upper()
-    books["Party Name"] = books["Party Name"].fillna("").astype(str).str.strip().str.upper()
-    
-    numeric_cols = ["Books Amount", "Books TDS"]
-    for col in numeric_cols:
-        books[col] = pd.to_numeric(books[col], errors="coerce").fillna(0)
-    
-    books = books.groupby(['Party Name', 'TAN'], as_index=False)[numeric_cols].sum()
-
-    # Exact match by TAN
-    agg_26as_deductor["TAN of Deductor"] = agg_26as_deductor["TAN of Deductor"].astype(str).str.strip().str.upper()
-    exact_match = pd.merge(agg_26as_deductor, books, left_on="TAN of Deductor", right_on="TAN", how="inner")
-    exact_match["Match Type"] = "Exact (TAN)"
-
-    matched_tans = exact_match["TAN of Deductor"].unique()
-    unmatched_26as = agg_26as_deductor[~agg_26as_deductor["TAN of Deductor"].isin(matched_tans)].copy()
-    unmatched_books = books[~books["TAN"].isin(matched_tans)].copy()
-
-    # Dictionary mappings
-    if known_mappings:
-        for tan_26, target_bk_name in known_mappings.items():
-            row_26 = unmatched_26as[unmatched_26as["TAN of Deductor"] == tan_26]
-            if row_26.empty:
-                continue
-            row_bk = unmatched_books[unmatched_books["Party Name"] == target_bk_name]
-            if row_bk.empty:
-                continue
-            
-            merged = row_26.iloc[0].to_dict()
-            bk_row = row_bk.iloc[0].to_dict()
-            merged.update({k: bk_row[k] for k in ["Party Name", "TAN", "Books Amount", "Books TDS"]})
-            merged["Match Type"] = "Dictionary Match"
-            exact_match = pd.concat([exact_match, pd.DataFrame([merged])], ignore_index=True)
-            
-            unmatched_26as = unmatched_26as[unmatched_26as["TAN of Deductor"] != tan_26]
-            unmatched_books = unmatched_books[unmatched_books["Party Name"] != target_bk_name]
-
-    # Fuzzy matching with optimized approach
-    fuzzy_records = []
-    matched_book_indices = set()
-    book_items = [(idx, row["Party Name"]) for idx, row in unmatched_books.iterrows()]
-
-    for idx_26, row_26 in unmatched_26as.iterrows():
-        name_26 = str(row_26["Name of Deductor"]).upper()
-        
-        if not book_items:
-            combined = row_26.to_dict()
-            combined["Match Type"] = "Missing in Books"
-            fuzzy_records.append(combined)
-            continue
-        
-        # Pre-filter candidates by first letter for performance
-        if len(book_items) > 100:
-            candidates = [(idx, name) for idx, name in book_items if name and name[0] == name_26[0]]
-            if not candidates:
-                candidates = book_items  # Fallback if no matches
-        else:
-            candidates = book_items
-        
-        if not candidates:
-            combined = row_26.to_dict()
-            combined["Match Type"] = "Missing in Books"
-            fuzzy_records.append(combined)
-            continue
-            
-        result = process.extractOne(
-            name_26, 
-            [name for _, name in candidates], 
-            scorer=fuzz.token_sort_ratio, 
-            score_cutoff=fuzzy_cutoff
-        )
-        
-        if result:
-            best_match_str, best_score, best_idx_in_list = result
-            best_orig_idx = candidates[best_idx_in_list][0]
-            
-            # Only process if not already matched
-            if best_orig_idx not in matched_book_indices:
-                combined = row_26.to_dict()
-                bk_row = unmatched_books.loc[best_orig_idx].to_dict()
-                combined.update({k: bk_row[k] for k in ["Party Name", "TAN", "Books Amount", "Books TDS"]})
-                combined["Match Type"] = "Fuzzy Match"
-                fuzzy_records.append(combined)
-                matched_book_indices.add(best_orig_idx)
-        else:
-            combined = row_26.to_dict()
-            combined["Match Type"] = "Missing in Books"
-            fuzzy_records.append(combined)
-
-    # Add books missing in 26AS
-    for idx, row in unmatched_books.iterrows():
-        if idx not in matched_book_indices:
-            combined = row.to_dict()
-            for col in ["Name of Deductor", "TAN of Deductor", "Total Amount Paid / Credited", "Total TDS Deposited", "Section"]:
-                combined[col] = "" if col != "Section" else ""
-            combined["Match Type"] = "Missing in 26AS"
-            fuzzy_records.append(combined)
-
-    fuzzy_df = pd.DataFrame(fuzzy_records) if fuzzy_records else pd.DataFrame()
-    recon = pd.concat([exact_match, fuzzy_df], ignore_index=True)
-
-    # Fill missing columns
-    for col in ["Name of Deductor", "Party Name", "TAN of Deductor", "TAN", "Section"]:
-        if col not in recon.columns:
-            recon[col] = ""
-
-    recon["Deductor / Party Name"] = np.where(
-        recon["Name of Deductor"].notna() & (recon["Name of Deductor"] != ""), 
-        recon["Name of Deductor"], 
-        recon["Party Name"]
-    )
-    recon["Final TAN"] = np.where(
-        recon["TAN of Deductor"].notna() & (recon["TAN of Deductor"] != ""), 
-        recon["TAN of Deductor"], 
-        recon["TAN"]
-    )
-
-    # Add sections column from lookup
-    recon['26AS Sections'] = recon['TAN of Deductor'].map(tan_to_sections).fillna('')
-
-    logger.info(f"Reconciliation complete: {len(recon)} records processed")
-    return recon, agg_26as_section, raw_26as_detailed, books
-
-# ============ HELPER: ADD TOTALS ROW ============
-def add_totals_row(df, numeric_cols):
-    """Append a totals row to a DataFrame."""
-    if df.empty:
-        return df
-    totals = {}
-    for col in df.columns:
-        if col in numeric_cols:
-            totals[col] = df[col].sum()
-        else:
-            totals[col] = "TOTAL"
-    totals_df = pd.DataFrame([totals])
-    return pd.concat([df, totals_df], ignore_index=True)
-
-# ============ MAIN EXECUTION ============
-if run_engine:
-    if not txt_file or not books_file:
-        st.warning("⚠️ Please upload both the 26AS and Books files to proceed.")
-    else:
-        with st.spinner("🚀 Running High-Speed AI Engine & Rate Auditor..."):
-            # Generate cache keys
-            txt_hash = hash_bytes(txt_file.getvalue())
-            books_hash = hash_bytes(books_file.getvalue())
-            mapping_hash = hash_bytes(str(known_mappings).encode()) if known_mappings else "none"
-            
-            try:
-                raw_recon, agg_26as_section, raw_26as_detailed, books = run_reconciliation_cached(
-                    txt_hash, books_hash, tolerance, fuzzy_cutoff, mapping_hash, preview_mode
-                )
-            except Exception as e:
-                st.error(f"❌ Processing error: {str(e)}")
-                logger.exception("Reconciliation failed")
-                st.stop()
-
-        if raw_recon.empty:
-            st.error("❌ No valid transaction data found in PART-I of the 26AS text file.")
-            st.stop()
-
-        recon = raw_recon.copy()
-
-        # Core Calculations
-        num_cols = ["Total Amount Paid / Credited", "Total TDS Deposited", "Books Amount", "Books TDS"]
-        for col in num_cols:
-            if col in recon.columns:
-                recon[col] = pd.to_numeric(recon[col], errors="coerce").fillna(0)
-
-        recon["Difference Amount"] = recon["Total Amount Paid / Credited"] - recon["Books Amount"]
-        recon["Difference TDS"] = recon["Total TDS Deposited"] - recon["Books TDS"]
-        recon['Effective Rate 26AS (%)'] = np.where(
-            recon['Total Amount Paid / Credited'] > 0, 
-            (recon['Total TDS Deposited'] / recon['Total Amount Paid / Credited']) * 100, 
-            0
-        ).round(2)
-
-        # Status classification
-        diff_tds = recon["Difference TDS"].abs()
-        conditions_status = [
-            (recon["Match Type"].isin(["Exact (TAN)", "Dictionary Match"])) & (diff_tds <= tolerance),
-            (recon["Match Type"].isin(["Exact (TAN)", "Dictionary Match"])) & (diff_tds > tolerance),
-            (recon["Match Type"] == "Fuzzy Match") & (diff_tds <= tolerance),
-            (recon["Match Type"] == "Fuzzy Match") & (diff_tds > tolerance),
-            (recon["Match Type"] == "Missing in Books"),
-            (recon["Match Type"] == "Missing in 26AS")
-        ]
-        statuses = ["Exact Match", "Value Mismatch", "Fuzzy Match", "Value Mismatch", "Missing in Books", "Missing in 26AS"]
-        reasons = ["Matched perfectly", "TDS value mismatch", "Matched ignoring name formatting", "TDS value mismatch", "Not recorded in Books", "Not reflected in 26AS"]
-
-        recon["Match Status"] = np.select(conditions_status, statuses, default="Unknown")
-        recon["Reason for Difference"] = np.select(conditions_status, reasons, default="Unknown")
-
-        # Build final reconciliation DataFrame
-        final_recon = recon[[
-            "26AS Sections", "Match Status", "Deductor / Party Name", "Final TAN",
-            "Total Amount Paid / Credited", "Books Amount", "Difference Amount",
-            "Total TDS Deposited", "Books TDS", "Difference TDS", "Effective Rate 26AS (%)", "Reason for Difference"
-        ]].rename(columns={"Final TAN": "TAN"})
-
-        # ============ ALERTS ============
-        st.markdown("### 🚨 Compliance & Anomaly Alerts")
-
-        # TDS Rate Anomaly
-        anomalies = recon[
-            (recon['Effective Rate 26AS (%)'] > 0) & 
-            (~recon['Effective Rate 26AS (%)'].isin(STANDARD_TDS_RATES))
-        ]
-        if not anomalies.empty:
-            top_anomaly = anomalies.nlargest(1, 'Total TDS Deposited').iloc[0]
-            st.markdown(f"""
-            <div class="alert-box-blue">
-                <b>🔎 TDS Rate Anomaly Detected:</b> Non-standard deduction rates identified.<br>
-                <span style="color: #7dd3fc; font-size: 0.95rem;"><i>👉 <b>{top_anomaly['Deductor / Party Name']}</b> deducted TDS at an effective rate of <b>{top_anomaly['Effective Rate 26AS (%)']}%</b>.</i></span>
-            </div>
-            """, unsafe_allow_html=True)
-
-        # Missing in Books
-        miss_in_books = recon[recon["Match Status"] == "Missing in Books"]
-        if not miss_in_books.empty and miss_in_books["Total TDS Deposited"].sum() > 0:
-            top_missed = miss_in_books.loc[miss_in_books["Total TDS Deposited"].idxmax()]
-            st.markdown(f"""
-            <div class="alert-box-red">
-                <b>URGENT: Unclaimed TDS Leakage!</b> ₹ {miss_in_books["Total TDS Deposited"].sum():,.2f} is in 26AS but completely <b>MISSING</b> in books.<br>
-                <span style="color: #fca5a5; font-size: 0.95rem;"><i>👉 Top Missing Party: <b>{top_missed['Deductor / Party Name']}</b> (₹ {top_missed['Total TDS Deposited']:,.2f}).</i></span>
-            </div>
-            """, unsafe_allow_html=True)
-
-        # Missing in 26AS
-        miss_in_26as = recon[recon["Match Status"] == "Missing in 26AS"]
-        if not miss_in_26as.empty and miss_in_26as["Books TDS"].sum() > 0:
-            top_excess = miss_in_26as.loc[miss_in_26as["Books TDS"].idxmax()]
-            st.markdown(f"""
-            <div class="alert-box-yellow">
-                <b>COMPLIANCE RISK:</b> ₹ {miss_in_26as["Books TDS"].sum():,.2f} of TDS is claimed in Books but <b>NOT uploaded in 26AS</b>.<br>
-                <span style="color: #fcd34d; font-size: 0.95rem;"><i>👉 Top Unreflected Party: <b>{top_excess['Deductor / Party Name']}</b> (₹ {top_excess['Books TDS']:,.2f}).</i></span>
-            </div>
-            """, unsafe_allow_html=True)
-
-        # ============ DASHBOARD ============
-        st.markdown("---")
-        st.markdown("### 📊 Live Summary Dashboard")
-        m1, m2, m3 = st.columns(3)
-        m1.metric("Total TDS in 26AS", f"₹ {recon['Total TDS Deposited'].sum():,.2f}")
-        m2.metric("Total TDS in Books", f"₹ {recon['Books TDS'].sum():,.2f}")
-        net_diff = recon['Total TDS Deposited'].sum() - recon['Books TDS'].sum()
-        m3.metric("Net Variance", f"₹ {net_diff:,.2f}", delta=f"₹ {net_diff:,.2f}", delta_color="inverse")
-
-        st.markdown("### 📈 Reconciliation Analytics")
-        c1, c2 = st.columns(2)
-
-        with c1:
-            status_counts = final_recon["Match Status"].value_counts().reset_index()
-            status_counts.columns = ["Match Status", "Count"]
-            color_map = {
-                "Exact Match": "#10b981", "Fuzzy Match": "#38bdf8",
-                "Value Mismatch": "#ef4444", "Missing in Books": "#f97316", "Missing in 26AS": "#8b5cf6"
-            }
-            fig_status = px.pie(
-                status_counts, names="Match Status", values="Count", 
-                title="Match Status Distribution", hole=0.4, 
-                color="Match Status", color_discrete_map=color_map
-            )
-            fig_status.update_layout(
-                plot_bgcolor="rgba(0,0,0,0)", 
-                paper_bgcolor="rgba(0,0,0,0)", 
-                font=dict(color="#f8fafc", family="Poppins")
-            )
-            st.plotly_chart(fig_status, use_container_width=True)
-
-        with c2:
-            # Section-wise bar chart
-            section_data = []
-            for _, row in recon.iterrows():
-                if row['26AS Sections'] and row['26AS Sections'] != "":
-                    for sec in row['26AS Sections'].split(','):
-                        section_data.append({
-                            'Section': sec.strip(), 
-                            'Total TDS Deposited': row['Total TDS Deposited']
-                        })
-            
-            if section_data:
-                section_df = pd.DataFrame(section_data)
-                section_summary = section_df.groupby('Section')['Total TDS Deposited'].sum().reset_index()
-                fig_sec = px.bar(
-                    section_summary, x='Section', y='Total TDS Deposited', 
-                    title="TDS Deposited by Section (26AS)"
-                )
-                fig_sec.update_layout(
-                    plot_bgcolor="rgba(0,0,0,0)", 
-                    paper_bgcolor="rgba(0,0,0,0)", 
-                    font=dict(color="#f8fafc", family="Poppins")
-                )
-                st.plotly_chart(fig_sec, use_container_width=True)
-            else:
-                st.info("ℹ️ No section data to display.")
-
-        # ============ EXCEL EXPORT ============
-        output = io.BytesIO()
-        actual_last_row = len(final_recon) + 2  # header row + data start at row 2
-        
-        with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-            workbook = writer.book
-            
-            # Formats
-            brand_format = workbook.add_format({
-                "bold": True, "font_size": 18, "bg_color": "#0f172a", 
-                "font_color": "#38bdf8", "align": "center", "valign": "vcenter"
-            })
-            dev_format = workbook.add_format({
-                "italic": True, "font_size": 10, "bg_color": "#0f172a", 
-                "font_color": "#94a3b8", "align": "center"
-            })
-            fmt_dark_blue_white = workbook.add_format({
-                "bold": True, "bg_color": "#0052cc", "font_color": "white", 
-                "border": 1, "text_wrap": True, "align": "center", "valign": "vcenter"
-            })
-            fmt_subtotal = workbook.add_format({
-                "bold": True, "bg_color": "#f2f2f2", "border": 1, "num_format": "#,##0.00"
-            })
-            fmt_number = workbook.add_format({"num_format": "#,##0.00"})
-
-            # Dashboard sheet
-            dash = workbook.add_worksheet("Dashboard")
-            dash.hide_gridlines(2)
-            fy_title = f"(FY: {extracted_fy})" if extracted_fy != "Unknown" else ""
-            dash.merge_range("A1:M2", f"26AS ENTERPRISE RECON - EXECUTIVE SUMMARY {fy_title}", brand_format)
-            dash.merge_range("A3:M3", f"Developed by ABHISHEK JAKKULA | Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}", dev_format)
-
-            dash.write_row("B5", ["Match Status", "Record Count", "TDS Impact (26AS)", "TDS Impact (Books)"], fmt_dark_blue_white)
-            dash.set_column('B:B', 25)
-            dash.set_column('C:E', 18)
-
-            dashboard_statuses = ["Exact Match", "Fuzzy Match", "Value Mismatch", "Missing in Books", "Missing in 26AS"]
-            status_start_row = 6
-            
-            for i, status in enumerate(dashboard_statuses):
-                row = status_start_row + i
-                dash.write(row, 1, status)
-                # Use dynamic row reference for formulas
-                dash.write_formula(row, 2, f'=COUNTIF(Reconciliation!$B$3:$B${actual_last_row}, "{status}")')
-                dash.write_formula(row, 3, f'=SUMIF(Reconciliation!$B$3:$B${actual_last_row}, "{status}", Reconciliation!$H$3:$H${actual_last_row})')
-                dash.write_formula(row, 4, f'=SUMIF(Reconciliation!$B$3:$B${actual_last_row}, "{status}", Reconciliation!$I$3:$I${actual_last_row})')
-
-            # Top suppliers tables
-            top_26as = final_recon[final_recon["Total TDS Deposited"] > 0].nlargest(10, "Total TDS Deposited")
-            top_books = final_recon[final_recon["Books TDS"] > 0].nlargest(10, "Books TDS")
-
-            dash.write("G5", "Top 10 Suppliers (26AS)", fmt_dark_blue_white)
-            dash.write_row("G6", ["Deductor / Party Name", "Total Amount (26AS)", "Total TDS (26AS)"], fmt_dark_blue_white)
-            for i, (_, row) in enumerate(top_26as.iterrows()):
-                dash.write_row(i + 6, 6, [row["Deductor / Party Name"], row["Total Amount Paid / Credited"], row["Total TDS Deposited"]])
-            dash.set_column('G:G', 35)
-            dash.set_column('H:I', 18)
-
-            dash.write("K5", "Top 10 Suppliers (Books)", fmt_dark_blue_white)
-            dash.write_row("K6", ["Deductor / Party Name", "Books Amount", "Books TDS"], fmt_dark_blue_white)
-            for i, (_, row) in enumerate(top_books.iterrows()):
-                dash.write_row(i + 6, 10, [row["Deductor / Party Name"], row["Books Amount"], row["Books TDS"]])
-            dash.set_column('K:K', 35)
-            dash.set_column('L:M', 18)
-
-            # Pie chart for status distribution
-            status_end_row = status_start_row + len(dashboard_statuses) - 1
-            pie_chart = workbook.add_chart({'type': 'pie'})
-            pie_chart.add_series({
-                'name': 'Status Distribution',
-                'categories': f'=Dashboard!$B${status_start_row}:$B${status_end_row}',
-                'values': f'=Dashboard!$C${status_start_row}:$C${status_end_row}',
-                'data_labels': {'percentage': True, 'show_leader_lines': True}
-            })
-            dash.insert_chart('B13', pie_chart)
-
-            # Reconciliation sheet
-            sheet_recon = workbook.add_worksheet("Reconciliation")
-            final_recon.to_excel(writer, sheet_name="Reconciliation", startrow=2, index=False, header=False)
-
-            for col_num, col_name in enumerate(final_recon.columns):
-                sheet_recon.write(1, col_num, col_name, fmt_dark_blue_white)
-                if pd.api.types.is_numeric_dtype(final_recon[col_name]) and col_name != "Effective Rate 26AS (%)":
-                    col_letter = chr(65 + col_num)
-                    formula = f"=SUBTOTAL(9,{col_letter}3:{col_letter}{actual_last_row})"
-                    sheet_recon.write_formula(0, col_num, formula, fmt_subtotal)
-
-                max_len = max(final_recon[col_name].astype(str).str.len().max(), len(str(col_name)))
-                sheet_recon.set_column(col_num, col_num, min(max_len + 3, 45))
-
-            sheet_recon.autofilter(1, 0, actual_last_row, len(final_recon.columns) - 1)
-
-            # 26AS Aggregated sheet
-            if not agg_26as_section.empty:
-                agg_sheet = workbook.add_worksheet("26AS Aggregated")
-                numeric_agg = ["Total Amount Paid / Credited", "Total TDS Deposited"]
-                agg_with_total = add_totals_row(agg_26as_section, numeric_agg)
-                agg_with_total.to_excel(writer, sheet_name="26AS Aggregated", startrow=1, index=False, header=False)
-                
-                for col_num, col_name in enumerate(agg_with_total.columns):
-                    agg_sheet.write(0, col_num, col_name, fmt_dark_blue_white)
-                    max_len = max(agg_with_total[col_name].astype(str).str.len().max(), len(col_name))
-                    agg_sheet.set_column(col_num, col_num, min(max_len + 3, 45))
-                    if col_name in numeric_agg:
-                        agg_sheet.set_column(col_num, col_num, None, fmt_number)
-                agg_sheet.autofilter(0, 0, len(agg_with_total), len(agg_with_total.columns)-1)
-
-            # 26AS Raw sheet
-            if not raw_26as_detailed.empty:
-                raw_sheet = workbook.add_worksheet("26AS Raw (Detailed)")
-                raw_columns = ["Section", "Sl. No.", "Name of Deductor", "TAN of Deductor",
-                               "Amount paid/credited", "Date of Payment/Credit",
-                               "Total tax deducted", "Amount claimed for this year", "C/F Tax"]
-                for col in raw_columns:
-                    if col not in raw_26as_detailed.columns:
-                        raw_26as_detailed[col] = ""
-                raw_data = raw_26as_detailed[raw_columns]
-                numeric_raw = ["Amount paid/credited", "Total tax deducted", "Amount claimed for this year", "C/F Tax"]
-                raw_with_total = add_totals_row(raw_data, numeric_raw)
-                raw_with_total.to_excel(writer, sheet_name="26AS Raw (Detailed)", startrow=1, index=False, header=False)
-                
-                for col_num, col_name in enumerate(raw_columns):
-                    raw_sheet.write(0, col_num, col_name, fmt_dark_blue_white)
-                    max_len = max(raw_with_total[col_name].astype(str).str.len().max(), len(col_name))
-                    raw_sheet.set_column(col_num, col_num, min(max_len + 3, 45))
-                    if col_name in numeric_raw:
-                        raw_sheet.set_column(col_num, col_num, None, fmt_number)
-                raw_sheet.autofilter(0, 0, len(raw_with_total), len(raw_columns)-1)
-
-            # Books Raw sheet
-            books.to_excel(writer, sheet_name="Books Raw", index=False)
-            sheet_bk_raw = writer.sheets["Books Raw"]
-            for i, col in enumerate(books.columns):
-                max_len = max(books[col].astype(str).str.len().max(), len(str(col)))
-                sheet_bk_raw.set_column(i, i, min(max_len + 3, 45))
-
-        output.seek(0)
-        st.success("✅ Enterprise Reconciliation completed successfully.")
-        logger.info("Reconciliation report generated successfully")
-
-        fy_safe = extracted_fy.replace('-', '_') if extracted_fy != 'Unknown' else 'Latest'
-        col_dl1, col_dl2, col_dl3 = st.columns([1, 2, 1])
-        with col_dl2:
-            st.download_button(
-                "⚡ Download Final Excel Report", 
-                output, 
-                f"26AS_Recon_FY_{fy_safe}.xlsx", 
-                use_container_width=True,
-                type="primary"
-            )
-
-st.markdown('</div>', unsafe_allow_html=True)
+# ================= HEADER SECTION =================
 st.markdown("""
-<div style="text-align:center; margin-top:30px; margin-bottom:20px; opacity:0.8;">
-    <span style="font-weight:700;">Tool Developed by Abhishek Jakkula</span><br>
-    <span>📧 <a href="mailto:jakkulaabhishek5@gmail.com" style="color: var(--accent-light); text-decoration:none;">jakkulaabhishek5@gmail.com</a></span>
+<div class="main-header animate-fade-in">
+    <h1>✨ GST Recon Pro</h1>
+    <p class="subtitle">
+        AI-Powered GST Reconciliation • Match GSTR-2B with Purchase Register • 
+        Real-time Insights • Compliance-Ready Reports • Credit/Debit Note Support
+    </p>
+</div>
+""", unsafe_allow_html=True)
+
+# ================= HELPER FUNCTIONS =================
+def get_month_format(month_str):
+    """Convert month string to format like JANUARY-25, FEBRUARY-25"""
+    if pd.isna(month_str) or str(month_str).strip() == "":
+        return "Unknown"
+    
+    try:
+        # Try to parse various formats
+        month_str = str(month_str).strip().upper()
+        
+        # If already in correct format (e.g., "JANUARY-25")
+        if '-' in month_str and len(month_str.split('-')[0]) > 3:
+            return month_str
+        
+        # Try parsing as YYYY-MM
+        if '-' in month_str and len(month_str) == 7:
+            year, month_num = month_str.split('-')
+            month_name = datetime(int(year), int(month_num), 1).strftime('%B').upper()
+            year_short = str(year)[-2:]
+            return f"{month_name}-{year_short}"
+        
+        # Try parsing as MM-YYYY
+        if '-' in month_str:
+            parts = month_str.split('-')
+            if len(parts) == 2 and len(parts[1]) == 4:
+                month_num, year = parts
+                month_name = datetime(int(year), int(month_num), 1).strftime('%B').upper()
+                year_short = str(year)[-2:]
+                return f"{month_name}-{year_short}"
+        
+        return month_str
+    except:
+        return month_str
+
+def normalize_document_number(doc_num):
+    if pd.isna(doc_num) or str(doc_num).strip() == "":
+        return "UNKNOWN"
+    normalized = re.sub(r'[^A-Z0-9]', '', str(doc_num).upper().strip())
+    return normalized.lstrip('0') or "0"
+
+def extract_pan_from_gstin(gstin):
+    if pd.isna(gstin) or len(str(gstin).strip()) < 15:
+        return "UNKNOWN"
+    return str(gstin).strip().upper()[2:12]
+
+def get_document_type(taxable_value, doc_type_col=None):
+    """Determine DOC_TYPE from value sign or existing column"""
+    if doc_type_col and pd.notna(doc_type_col):
+        dt = str(doc_type_col).upper().strip()
+        if dt in ['CREDIT', 'CREDIT NOTE', 'CDN', 'CN']:
+            return 'CREDIT'
+        elif dt in ['DEBIT', 'DEBIT NOTE', 'DBN', 'DN']:
+            return 'DEBIT'
+        elif dt in ['INVOICE', 'INV', 'B2B', 'B2C']:
+            return 'INVOICE'
+    try:
+        val = float(taxable_value)
+        if val < 0:
+            return 'CREDIT'
+        elif val > 0:
+            return 'INVOICE'
+        else:
+            return 'DEBIT'
+    except:
+        return 'INVOICE'
+
+def parse_date(date_str):
+    if pd.isna(date_str) or str(date_str).strip() == "":
+        return None
+    for fmt in ['%d-%m-%Y', '%Y-%m-%d', '%d/%m/%Y', '%m/%d/%Y']:
+        try:
+            return datetime.strptime(str(date_str).strip(), fmt)
+        except:
+            continue
+    return None
+
+def get_financial_year(date_obj):
+    if date_obj is None:
+        return "Unknown"
+    if date_obj.month >= 4:
+        return f"{date_obj.year}-{str(date_obj.year + 1)[-2:]}"
+    return f"{date_obj.year - 1}-{str(date_obj.year)[-2:]}"
+
+def is_same_financial_year(date1_str, date2_str):
+    d1, d2 = parse_date(date1_str), parse_date(date2_str)
+    return d1 and d2 and get_financial_year(d1) == get_financial_year(d2)
+
+# ================= ENHANCED SAMPLE TEMPLATE GENERATORS =================
+def generate_sample_2b_template():
+    """Generate sample GSTR-2B with proper DOC_TYPE breakdown and negative CDN values"""
+    cols = [
+        "SUPPLIER GSTIN", "DOCUMENT NUMBER", "TAXABLE VALUE", "IGST", "CGST", "SGST", 
+        "SUPPLIER NAME", "MY GSTIN", "DOCUMENT DATE", "MONTH", "DOC_TYPE", "REVERSE_CHARGE"
+    ]
+    
+    sample_data = [
+        # INVOICES
+        ["36CNNPD6299J1ZB", "11/2023-24", 7500.00, 0, 675.00, 675.00, "NESHWARI ENGINEERING AND SERVICES", "36ADXFS5154R1ZU", "24-07-2023", "JULY-23", "INVOICE", "NO"],
+        ["08AAACM8473A1ZL", "MEC-439-2023", 13150.00, 2367.00, 0, 0, "METALLIZING EQUIPMENT COMPANY P. LTD.", "36ADXFS5154R1ZU", "26-05-2023", "MAY-23", "INVOICE", "NO"],
+        ["36ADUPV8726H1ZM", "ET/LSR/2324/1616", 390.00, 0, 35.10, 35.10, "M/S EXCELANT TECHNOLOGIES", "36ADXFS5154R1ZU", "20-01-2024", "JANUARY-24", "INVOICE", "NO"],
+        ["36AAFCS6791L1ZN", "23-24/4406", 123500.00, 0, 11115.00, 11115.00, "SAI DEEPA ROCK DRILLS PVT LTD", "36ADXFS5154R1ZU", "02-01-2024", "JANUARY-24", "INVOICE", "NO"],
+        ["36BDJPM4292D2ZF", "11/23-24", 153026.00, 0, 13772.34, 13772.34, "SANJAY MANDAL LABOUR CONTRACTOR", "36ADXFS5154R1ZU", "01-05-2023", "MAY-23", "INVOICE", "NO"],
+        ["36AGIPG4790K1Z0", "GST-23-24/157", 4582.00, 0, 412.38, 412.38, "S K ENGINEERS", "36ADXFS5154R1ZU", "06-07-2023", "JULY-23", "INVOICE", "NO"],
+        ["36DGLPP5363P1ZG", "ST/23-24/39", 23650.00, 0, 2128.50, 2128.50, "S SQUARE INDUSTRIES", "36ADXFS5154R1ZU", "03-05-2023", "MAY-23", "INVOICE", "NO"],
+        ["36ADXFS5161J1ZB", "INV/23-24/0092", 2470.00, 0, 222.30, 222.30, "SD WoT", "36ADXFS5154R1ZU", "07-07-2023", "JULY-23", "INVOICE", "NO"],
+        ["27AIXPL7527J1ZF", "VT/23-24/045", 14700.00, 2646.00, 0, 0, "VICTORY TOOLS", "36ADXFS5154R1ZU", "25-04-2023", "APRIL-23", "INVOICE", "NO"],
+        ["27AIXPL7527J1ZF", "VT/23-24/312", 31290.00, 5632.20, 0, 0, "VICTORY TOOLS", "36ADXFS5154R1ZU", "15-01-2024", "JANUARY-24", "INVOICE", "NO"],
+        
+        # CREDIT NOTES (NEGATIVE VALUES)
+        ["36AFKPD6156R1ZT", "23", -5042.36, 0, -453.81, -453.81, "M/S SRI SATYA TECHNOLOGIES", "36ADXFS5154R1ZU", "22-02-2024", "FEBRUARY-24", "CREDIT", "NO"],
+        ["36AADCR6281N1ZT", "CN-2024-001", -2500.00, 0, -225.00, -225.00, "CARE HEALTH INSURANCE LIMITED", "36ADXFS5154R1ZU", "15-03-2024", "MARCH-24", "CREDIT", "NO"],
+        ["08AAACM8473A1ZL", "CN-MEC-001", -1500.00, -270.00, 0, 0, "METALLIZING EQUIPMENT COMPANY P. LTD.", "36ADXFS5154R1ZU", "10-01-2024", "JANUARY-24", "CREDIT", "NO"],
+        
+        # DEBIT NOTES
+        ["36CNNPD6299J1ZB", "DN-2024-001", 1200.00, 0, 108.00, 108.00, "NESHWARI ENGINEERING AND SERVICES", "36ADXFS5154R1ZU", "05-03-2024", "MARCH-24", "DEBIT", "NO"],
+        ["36AAFCS6791L1ZN", "DN-SDR-002", 3500.00, 0, 315.00, 315.00, "SAI DEEPA ROCK DRILLS PVT LTD", "36ADXFS5154R1ZU", "20-02-2024", "FEBRUARY-24", "DEBIT", "NO"],
+        
+        # MISSING IN PR
+        ["36AADCR6281N1ZT", "67186859-1D", 8579.40, 0, 772.11, 772.11, "CARE HEALTH INSURANCE LIMITED", "36ADXFS5154R1ZU", "01-01-2024", "JANUARY-24", "INVOICE", "NO"],
+        ["36CKUPB7102C1ZF", "BEW/23-24/53", 3500.00, 0, 315.00, 315.00, "BALAJI ENGINEERING WORKS", "36ADXFS5154R1ZU", "29-09-2023", "SEPTEMBER-23", "INVOICE", "NO"],
+        ["36AAJCS4517L1ZZ", "362311I000806960", 11388.88, 0, 1025.00, 1025.00, "STAR HEALTH AND ALLIED INSURANCE COMPANY LIMITED", "36ADXFS5154R1ZU", "13-11-2023", "NOVEMBER-23", "INVOICE", "NO"],
+        ["36AADCR6281N1ZT", "71936233-1D", 6987.59, 0, 628.89, 628.89, "CARE HEALTH INSURANCE LIMITED", "36ADXFS5154R1ZU", "01-12-2023", "DECEMBER-23", "INVOICE", "NO"],
+        ["36AXXPS8501J1ZN", "34/2022-23", 90000.00, 0, 2250.00, 2250.00, "SRINIVASA CATERERS", "36ADXFS5154R1ZU", "01-11-2022", "APRIL-23", "INVOICE", "NO"],
+        
+        # REVERSE CHARGE
+        ["29AAOCA4995P1ZH", "RC/2023/001", 5000.00, 900.00, 0, 0, "REVERSE CHARGE SUPPLIER", "36ADXFS5154R1ZU", "15-06-2023", "JUNE-23", "INVOICE", "YES"],
+    ]
+    
+    df_sample = pd.DataFrame(sample_data, columns=cols)
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+        df_sample.to_excel(writer, sheet_name="GSTR_2B_Data", index=False)
+        workbook = writer.book
+        worksheet = writer.sheets["GSTR_2B_Data"]
+        header_format = workbook.add_format({"bold": True, "bg_color": "#1e40af", "font_color": "white", "border": 1, "align": "center"})
+        for col_num, col_name in enumerate(cols):
+            worksheet.write(0, col_num, col_name, header_format)
+        worksheet.set_column('A:A', 20)
+        worksheet.set_column('B:B', 22)
+        worksheet.set_column('C:F', 14)
+        worksheet.set_column('G:G', 35)
+        worksheet.set_column('H:H', 20)
+        worksheet.set_column('I:I', 14)
+        worksheet.set_column('J:J', 14)
+        worksheet.set_column('K:L', 14)
+    return output.getvalue()
+
+
+def generate_sample_books_template():
+    """Generate sample Purchase Register with proper DOC_TYPE and negative CDN values"""
+    cols = [
+        "SUPPLIER GSTIN", "DOCUMENT NUMBER", "TAXABLE VALUE", "IGST", "CGST", "SGST", 
+        "SUPPLIER NAME", "MY GSTIN", "DOCUMENT DATE", "MONTH", "DOC_TYPE", "REVERSE_CHARGE",
+        "ITC_CLAIM_TYPE", "PLACE_OF_SUPPLY"
+    ]
+    
+    sample_data = [
+        # INVOICES
+        ["36CNNPD6299J1ZB", "11/2023-24", 7500.00, 0, 675.00, 675.00, "NESHWARI ENGINEERING AND SERVICES", "36ADXFS5154R1ZU", "24-07-2023", "JULY-23", "INVOICE", "NO", "ELIGIBLE", "TELANGANA"],
+        ["08AAACM8473A1ZL", "MEC-439-2023", 13150.00, 2367.00, 0, 0, "METALLIZING EQUIPMENT COMPANY P. LTD.", "36ADXFS5154R1ZU", "26-05-2023", "MAY-23", "INVOICE", "NO", "ELIGIBLE", "TELANGANA"],
+        ["36ADUPV8726H1ZM", "ET/LSR/2324/1616", 390.00, 0, 35.10, 35.10, "M/S EXCELANT TECHNOLOGIES", "36ADXFS5154R1ZU", "20-01-2024", "JANUARY-24", "INVOICE", "NO", "ELIGIBLE", "TELANGANA"],
+        ["36AAFCS6791L1ZN", "23-24/4406", 123500.00, 0, 11115.00, 11115.00, "SAI DEEPA ROCK DRILLS PVT LTD", "36ADXFS5154R1ZU", "02-01-2024", "JANUARY-24", "INVOICE", "NO", "ELIGIBLE", "TELANGANA"],
+        ["36BDJPM4292D2ZF", "11/23-24", 153026.00, 0, 13772.34, 13772.34, "SANJAY MANDAL LABOUR CONTRACTOR", "36ADXFS5154R1ZU", "01-05-2023", "MAY-23", "INVOICE", "NO", "ELIGIBLE", "TELANGANA"],
+        ["36AGIPG4790K1Z0", "GST-23-24/157", 4582.00, 0, 412.38, 412.38, "S K ENGINEERS", "36ADXFS5154R1ZU", "06-07-2023", "JULY-23", "INVOICE", "NO", "ELIGIBLE", "TELANGANA"],
+        
+        # CREDIT NOTES (NEGATIVE VALUES)
+        ["36AFKPD6156R1ZT", "23", -5042.36, 0, -453.81, -453.81, "M/S SRI SATYA TECHNOLOGIES", "36ADXFS5154R1ZU", "22-02-2024", "FEBRUARY-24", "CREDIT", "NO", "ELIGIBLE", "TELANGANA"],
+        ["36AADCR6281N1ZT", "CN-2024-001", -2500.00, 0, -225.00, -225.00, "CARE HEALTH INSURANCE LIMITED", "36ADXFS5154R1ZU", "15-03-2024", "MARCH-24", "CREDIT", "NO", "ELIGIBLE", "TELANGANA"],
+        ["08AAACM8473A1ZL", "CN-MEC-001", -1500.00, -270.00, 0, 0, "METALLIZING EQUIPMENT COMPANY P. LTD.", "36ADXFS5154R1ZU", "10-01-2024", "JANUARY-24", "CREDIT", "NO", "ELIGIBLE", "TELANGANA"],
+        
+        # DEBIT NOTES
+        ["36CNNPD6299J1ZB", "DN-2024-001", 1200.00, 0, 108.00, 108.00, "NESHWARI ENGINEERING AND SERVICES", "36ADXFS5154R1ZU", "05-03-2024", "MARCH-24", "DEBIT", "NO", "ELIGIBLE", "TELANGANA"],
+        ["36AAFCS6791L1ZN", "DN-SDR-002", 3500.00, 0, 315.00, 315.00, "SAI DEEPA ROCK DRILLS PVT LTD", "36ADXFS5154R1ZU", "20-02-2024", "FEBRUARY-24", "DEBIT", "NO", "ELIGIBLE", "TELANGANA"],
+        
+        # SUGGESTED MATCHES
+        ["36DGLPP5363P1ZG", "ST/23-24/39", 23650.00, 0, 2128.50, 2128.50, "S SQUARE INDUSTRIES", "36ADXFS5154R1ZU", "01-06-2023", "JUNE-23", "INVOICE", "NO", "ELIGIBLE", "TELANGANA"],
+        ["36ADXFS5161J1ZB", "INV/23-24/0092", 2470.00, 0, 222.30, 222.30, "SD WoT", "36ADXFS5154R1ZU", "01-09-2023", "SEPTEMBER-23", "INVOICE", "NO", "ELIGIBLE", "TELANGANA"],
+        ["27AIXPL7527J1ZF", "VT/23-24/045", 14700.00, 2646.00, 0, 0, "VICTORY TOOLS", "36ADXFS5154R1ZU", "01-05-2023", "MAY-23", "INVOICE", "NO", "ELIGIBLE", "TELANGANA"],
+        ["27AIXPL7527J1ZF", "VT/23-24/312", 31290.00, 5632.20, 0, 0, "VICTORY TOOLS", "36ADXFS5154R1ZU", "01-02-2024", "FEBRUARY-24", "INVOICE", "NO", "ELIGIBLE", "TELANGANA"],
+        
+        # MISSING IN 2B
+        ["36AAGCE1603E1Z6", "EDT/SB/2223/013", 79200.00, 0, 4752.00, 4752.00, "EXIGENT DRILLING TECHNOLOGIES PRIVATE LIMITED", "36ADXFS5154R1ZU", "01-04-2023", "APRIL-23", "INVOICE", "NO", "ELIGIBLE", "TELANGANA"],
+        ["36BDJPM4292D2ZF", "106/22-23", 211868.00, 0, 19068.12, 19068.12, "SANJAY MANDAL LABOUR CONTRACTOR", "36ADXFS5154R1ZU", "01-04-2023", "APRIL-23", "INVOICE", "NO", "ELIGIBLE", "TELANGANA"],
+        ["36BNDPM1159D1Z9", "160", 12015.00, 0, 1081.35, 1081.35, "SRI SAI DURGA PAINTS", "36ADXFS5154R1ZU", "01-04-2023", "APRIL-23", "INVOICE", "NO", "ELIGIBLE", "TELANGANA"],
+        ["36CKUPB7102C1ZF", "BEW/22-23/101", 1365.00, 0, 81.90, 81.90, "BALAJI ENGINEERING WORKS", "36ADXFS5154R1ZU", "01-05-2023", "MAY-23", "INVOICE", "NO", "ELIGIBLE", "TELANGANA"],
+        ["36BECPP5867F1Z7", "055/BSE/22-23", 3850.00, 0, 346.50, 346.50, "B-SON ELECTRICALS", "36ADXFS5154R1ZU", "01-04-2023", "APRIL-23", "INVOICE", "NO", "ELIGIBLE", "TELANGANA"],
+        ["29AAOCA4995P1ZH", "FD/22-23/0316", 165318.00, 29757.24, 0, 0, "ANNFLUID DYNAMIKS PRIVATE LIMITED", "36ADXFS5154R1ZU", "01-04-2023", "APRIL-23", "INVOICE", "NO", "ELIGIBLE", "TELANGANA"],
+        ["29AILPR7596P1ZS", "MMU/22-23/86", 265000.00, 47700.00, 0, 0, "MARUTHI MACHINE UDYOG", "36ADXFS5154R1ZU", "01-04-2023", "APRIL-23", "INVOICE", "NO", "ELIGIBLE", "TELANGANA"],
+        ["29AARFC9317P1ZG", "2022008", 21000.00, 3780.00, 0, 0, "CAL-TECHNOLOGIES", "36ADXFS5154R1ZU", "01-04-2023", "APRIL-23", "INVOICE", "NO", "ELIGIBLE", "TELANGANA"],
+        ["36AAGCE1603E1Z6", "DEBIT NOTE NO.1", 8240.00, 0, 494.40, 494.40, "Exigent Drilling Technologies Private Limited", "36ADXFS5154R1ZU", "12-06-2023", "JUNE-23", "INVOICE", "NO", "ELIGIBLE", "TELANGANA"],
+        ["36ATFPG9930M1Z8", "GRK/43/2022-2023", 88143.00, 0, 7932.87, 7932.87, "GRK ENTERPRISES", "36ADXFS5154R1ZU", "01-06-2023", "JUNE-23", "INVOICE", "NO", "ELIGIBLE", "TELANGANA"],
+        ["29AILPR7596P1ZS", "MMU/22-23/85", 1350000.00, 243000.00, 0, 0, "MARUTHI MACHINE UDYOG", "36ADXFS5154R1ZU", "01-04-2023", "APRIL-23", "INVOICE", "NO", "ELIGIBLE", "TELANGANA"],
+        ["29AILPR7596P1ZS", "MMU/22-23/84", 250000.00, 45000.00, 0, 0, "MARUTHI MACHINE UDYOG", "36ADXFS5154R1ZU", "01-04-2023", "APRIL-23", "INVOICE", "NO", "ELIGIBLE", "TELANGANA"],
+        
+        # MISMATCH EXAMPLE
+        ["36AAACU2414K1ZG", "Z", 300.00, 0, 27.00, 27.00, "AXIS BANK LTD", "36ADXFS5154R1ZU", "07-11-2023", "NOVEMBER-23", "INVOICE", "NO", "ELIGIBLE", "TELANGANA"],
+    ]
+    
+    df_sample = pd.DataFrame(sample_data, columns=cols)
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+        df_sample.to_excel(writer, sheet_name="Purchase_Register", index=False)
+        workbook = writer.book
+        worksheet = writer.sheets["Purchase_Register"]
+        header_format = workbook.add_format({"bold": True, "bg_color": "#1e40af", "font_color": "white", "border": 1, "align": "center"})
+        for col_num, col_name in enumerate(cols):
+            worksheet.write(0, col_num, col_name, header_format)
+        worksheet.set_column('A:A', 20)
+        worksheet.set_column('B:B', 22)
+        worksheet.set_column('C:F', 14)
+        worksheet.set_column('G:G', 35)
+        worksheet.set_column('H:H', 20)
+        worksheet.set_column('I:I', 14)
+        worksheet.set_column('J:J', 14)
+        worksheet.set_column('K:N', 14)
+    return output.getvalue()
+
+# ================= FILE UPLOAD SECTION =================
+st.markdown("""
+<div class="section-card animate-fade-in">
+    <h3><span class="icon">📁</span> Upload Your Files</h3>
+    <p style="color: var(--text-secondary); margin-bottom: 24px; line-height: 1.6;">
+        Select your GSTR-2B and Purchase Register files. Ensure DOC_TYPE column has: INVOICE, CREDIT, or DEBIT.
+        <br><strong>💡 Credit Notes should have negative taxable/tax values for proper matching.</strong>
+        <br><strong>📅 Month format: JANUARY-25, FEBRUARY-25, etc.</strong>
+    </p>
+""", unsafe_allow_html=True)
+
+col_upload1, col_upload2, col_upload3 = st.columns([2, 2, 1])
+
+with col_upload1:
+    file_2b = st.file_uploader("📄 GSTR-2B File", type=['xlsx', 'xls'], key='upload_2b', label_visibility="collapsed")
+    if file_2b:
+        st.success(f"✓ {file_2b.name}")
+
+with col_upload2:
+    file_pr = st.file_uploader("📘 Purchase Register", type=['xlsx', 'xls'], key='upload_pr', label_visibility="collapsed")
+    if file_pr:
+        st.success(f"✓ {file_pr.name}")
+
+with col_upload3:
+    st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)
+    col_d1, col_d2 = st.columns(2)
+    with col_d1:
+        st.download_button(
+            label="📥 2B Sample",
+            data=generate_sample_2b_template(),
+            file_name="GSTR2B_Sample_CDN.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True
+        )
+    with col_d2:
+        st.download_button(
+            label="📘 PR Sample",
+            data=generate_sample_books_template(),
+            file_name="PurchaseRegister_Sample_CDN.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True
+        )
+
+st.markdown("</div>", unsafe_allow_html=True)
+
+# ================= MAIN PROCESSING FUNCTION =================
+@st.cache_data(show_spinner=False)
+def process_reconciliation(file_2b_bytes, file_pr_bytes, tolerance, date_tol_days, include_rc, handle_cdn_neg):
+    """Main reconciliation with enhanced Credit/Debit Note handling"""
+    
+    df_2b = pd.read_excel(io.BytesIO(file_2b_bytes))
+    df_pr = pd.read_excel(io.BytesIO(file_pr_bytes))
+    
+    # Clean column names
+    for df in [df_2b, df_pr]:
+        df.columns = df.columns.str.replace('*', '', regex=False).str.strip().str.upper()
+    
+    # Standardize columns
+    col_map = {
+        'SUPPLIER GSTIN': 'SUPPLIER_GSTIN', 'DOCUMENT NUMBER': 'DOC_NUMBER',
+        'TAXABLE VALUE': 'TAXABLE_VALUE', 'SUPPLIER NAME': 'SUPPLIER_NAME',
+        'MY GSTIN': 'MY_GSTIN', 'DOCUMENT DATE': 'DOC_DATE', 'DOC_TYPE': 'DOC_TYPE',
+        'REVERSE_CHARGE': 'REVERSE_CHARGE', 'ITC_CLAIM_TYPE': 'ITC_CLAIM_TYPE',
+        'PLACE_OF_SUPPLY': 'PLACE_OF_SUPPLY', 'MONTH': 'MONTH'
+    }
+    for old, new in col_map.items():
+        if old in df_2b.columns:
+            df_2b[new] = df_2b[old]
+        if old in df_pr.columns:
+            df_pr[new] = df_pr[old]
+    
+    # Ensure required columns
+    required = ['SUPPLIER_GSTIN', 'DOC_NUMBER', 'TAXABLE_VALUE', 'SUPPLIER_NAME', 
+                'MY_GSTIN', 'DOC_DATE', 'IGST', 'CGST', 'SGST']
+    for col in required:
+        if col not in df_2b.columns:
+            df_2b[col] = None
+        if col not in df_pr.columns:
+            df_pr[col] = None
+    for df in [df_2b, df_pr]:
+        if 'CESS' not in df.columns:
+            df['CESS'] = 0
+    
+    # Fill NaN and standardize
+    for df in [df_2b, df_pr]:
+        df['SUPPLIER_GSTIN'] = df['SUPPLIER_GSTIN'].fillna('UNKNOWN').astype(str).str.upper().str.strip()
+        df['MY_GSTIN'] = df['MY_GSTIN'].fillna('').astype(str).str.upper().str.strip()
+        df['SUPPLIER_NAME'] = df['SUPPLIER_NAME'].fillna('Unknown').astype(str).str.strip()
+        df['DOC_NUMBER'] = df['DOC_NUMBER'].fillna('').astype(str).str.strip()
+        df['DOC_DATE'] = df['DOC_DATE'].fillna('').astype(str).str.strip()
+        df['REVERSE_CHARGE'] = df.get('REVERSE_CHARGE', pd.Series(['NO']*len(df))).fillna('NO').astype(str).str.upper().str.strip()
+        # ✅ Convert month to new format
+        df['MONTH'] = df.get('MONTH', pd.Series(['Unknown']*len(df))).fillna('Unknown').apply(get_month_format)
+        df['ITC_CLAIM_TYPE'] = df.get('ITC_CLAIM_TYPE', pd.Series(['']*len(df))).fillna('').astype(str).str.strip().str.upper()
+        df['PLACE_OF_SUPPLY'] = df.get('PLACE_OF_SUPPLY', pd.Series(['']*len(df))).fillna('').astype(str).str.strip().str.upper()
+        
+        # Convert numeric
+        for col in ['TAXABLE_VALUE', 'IGST', 'CGST', 'SGST', 'CESS']:
+            df[col] = pd.to_numeric(df.get(col, pd.Series([0]*len(df))), errors='coerce').fillna(0)
+        
+        # Derive DOC_TYPE properly
+        if 'DOC_TYPE' not in df.columns or df['DOC_TYPE'].isna().any():
+            df['DOC_TYPE'] = df.apply(lambda r: get_document_type(r['TAXABLE_VALUE'], r.get('DOC_TYPE')), axis=1)
+        else:
+            if handle_cdn_neg:
+                df.loc[(df['TAXABLE_VALUE'] < 0) & (~df['DOC_TYPE'].str.upper().isin(['CREDIT', 'CDN', 'CN'])), 'DOC_TYPE'] = 'CREDIT'
+                df.loc[(df['TAXABLE_VALUE'] > 0) & (df['DOC_TYPE'].str.upper().isin(['CREDIT', 'CDN', 'CN'])), 'DOC_TYPE'] = 'INVOICE'
+            df['DOC_TYPE'] = df['DOC_TYPE'].apply(lambda x: str(x).upper().strip())
+            df['DOC_TYPE'] = df['DOC_TYPE'].replace({'CREDIT NOTE': 'CREDIT', 'DEBIT NOTE': 'DEBIT', 'CDN': 'CREDIT', 'CN': 'CREDIT', 'DBN': 'DEBIT', 'DN': 'DEBIT', 'INV': 'INVOICE', 'B2B': 'INVOICE', 'B2C': 'INVOICE'})
+    
+    # Filter reverse charge if needed
+    if not include_rc:
+        df_2b = df_2b[df_2b['REVERSE_CHARGE'] != 'YES'].copy()
+        df_pr = df_pr[df_pr['REVERSE_CHARGE'] != 'YES'].copy()
+    
+    # Create matching keys
+    for df in [df_2b, df_pr]:
+        df['PAN'] = df['SUPPLIER_GSTIN'].apply(extract_pan_from_gstin)
+        df['NORM_DOC'] = df['DOC_NUMBER'].apply(normalize_document_number)
+        df['MATCH_KEY'] = df['PAN'] + '|' + df['NORM_DOC'] + '|' + df['DOC_TYPE']
+    
+    dup_pr_count = df_pr.duplicated(subset=['MATCH_KEY'], keep=False).sum()
+    
+    # Outer merge
+    merged = pd.merge(df_2b, df_pr, on='MATCH_KEY', how='outer', suffixes=('_2B', '_PR'), indicator=True)
+    
+    # Calculate totals
+    merged['TOTAL_TAX_2B'] = merged[['IGST_2B', 'CGST_2B', 'SGST_2B', 'CESS_2B']].sum(axis=1)
+    merged['TOTAL_TAX_PR'] = merged[['IGST_PR', 'CGST_PR', 'SGST_PR', 'CESS_PR']].sum(axis=1)
+    merged['TAXABLE_DIFF'] = (merged['TAXABLE_VALUE_2B'].fillna(0) - merged['TAXABLE_VALUE_PR'].fillna(0)).abs()
+    merged['TAX_DIFF'] = (merged['TOTAL_TAX_2B'].fillna(0) - merged['TOTAL_TAX_PR'].fillna(0)).abs()
+    
+    # Matching conditions
+    exact_gstin = merged['SUPPLIER_GSTIN_2B'].str.upper() == merged['SUPPLIER_GSTIN_PR'].str.upper()
+    exact_doc = merged['DOC_NUMBER_2B'].str.upper() == merged['DOC_NUMBER_PR'].str.upper()
+    tax_within_tol = merged['TAXABLE_DIFF'] <= tolerance
+    tax_exact = merged['TAXABLE_DIFF'] == 0
+    same_pan = merged['PAN_2B'] == merged['PAN_PR']
+    norm_doc_match = merged['NORM_DOC_2B'] == merged['NORM_DOC_PR']
+    same_doc_type = merged['DOC_TYPE_2B'] == merged['DOC_TYPE_PR']
+    date_differs = merged['DOC_DATE_2B'] != merged['DOC_DATE_PR']
+    within_fy = merged.apply(lambda r: is_same_financial_year(r['DOC_DATE_2B'], r['DOC_DATE_PR']), axis=1)
+    
+    conditions = [
+        (merged['_merge'] == 'both') & exact_gstin & exact_doc & same_doc_type & tax_exact,
+        (merged['_merge'] == 'both') & same_pan & norm_doc_match & same_doc_type & tax_within_tol & date_differs & within_fy,
+        (merged['_merge'] == 'both') & exact_gstin & exact_doc & same_doc_type & ~tax_within_tol,
+        (merged['_merge'] == 'both') & same_pan & norm_doc_match & tax_within_tol & ~same_doc_type,
+        (merged['_merge'] == 'both') & same_pan & ~exact_gstin & tax_within_tol,
+        (merged['_merge'] == 'left_only'),
+        (merged['_merge'] == 'right_only'),
+    ]
+    statuses = ['Exact', 'Suggested', 'Value Mismatch', 'Doc Type Mismatch', 'Cross-State (PAN Match)', 'Missing in GSTR 2B', 'Missing in PR']
+    reasons = [
+        'All parameters matching exactly including DOC_TYPE',
+        'Document date differs within FY, values within tolerance, same DOC_TYPE',
+        'Document number & GSTIN match, but taxable/tax mismatch exceeds tolerance',
+        'Document matches but DOC_TYPE differs (Invoice vs Credit/Debit)',
+        'Matched on PAN, but State GSTIN differs',
+        'Present in GSTR-2B but missing in Purchase Register',
+        'Present in Purchase Register but missing in GSTR-2B'
+    ]
+    
+    merged['MATCH_STATUS'] = np.select(conditions, statuses, default='Other')
+    merged['MATCH_REASON'] = np.select(conditions, reasons, default='Unable to determine match criteria')
+    merged['SUPPLIER_NAME_COMBINED'] = merged['SUPPLIER_NAME_2B'].combine_first(merged['SUPPLIER_NAME_PR']).fillna('Unknown')
+    
+    # ITC eligibility
+    def determine_itc(row):
+        if row['MATCH_STATUS'] == 'Exact' and auto_claim_itc:
+            return 'ELIGIBLE'
+        elif row['MATCH_STATUS'] == 'Suggested':
+            return 'REVIEW REQUIRED'
+        elif row['MATCH_STATUS'] in ['Missing in GSTR 2B', 'Value Mismatch']:
+            return 'NOT ELIGIBLE'
+        elif row['MATCH_STATUS'] == 'Missing in PR':
+            return 'PENDING BOOKS ENTRY'
+        elif row['DOC_TYPE_2B'] == 'CREDIT' or row['DOC_TYPE_PR'] == 'CREDIT':
+            return 'CREDIT NOTE - REVIEW'
+        else:
+            return row.get('ITC_CLAIM_TYPE_2B', row.get('ITC_CLAIM_TYPE_PR', 'UNKNOWN'))
+    
+    merged['ITC_ELIGIBILITY'] = merged.apply(determine_itc, axis=1)
+    
+    return merged, dup_pr_count, df_2b, df_pr
+
+# ================= MAIN PROCESSING LOGIC =================
+if file_2b and file_pr:
+    try:
+        with st.spinner("🚀 Running Advanced Reconciliation Engine..."):
+            merged_df, dup_pr_count, df_2b, df_pr = process_reconciliation(
+                file_2b.getvalue(), file_pr.getvalue(), tolerance, date_tolerance, 
+                include_reverse_charge, handle_cdn_negative
+            )
+            
+            # Summary stats
+            status_counts = merged_df['MATCH_STATUS'].value_counts()
+            total_records = len(merged_df)
+            exact_count = status_counts.get('Exact', 0)
+            suggested_count = status_counts.get('Suggested', 0)
+            missing_2b = status_counts.get('Missing in GSTR 2B', 0)
+            missing_pr = status_counts.get('Missing in PR', 0)
+            
+            # DOC_TYPE BREAKDOWN STATS
+            doc_type_stats = {}
+            for dt in ['INVOICE', 'CREDIT', 'DEBIT']:
+                mask_2b = df_2b['DOC_TYPE'] == dt
+                mask_pr = df_pr['DOC_TYPE'] == dt
+                doc_type_stats[f'{dt}_2B_count'] = mask_2b.sum()
+                doc_type_stats[f'{dt}_2B_taxable'] = df_2b.loc[mask_2b, 'TAXABLE_VALUE'].sum()
+                doc_type_stats[f'{dt}_2B_tax'] = df_2b.loc[mask_2b, ['IGST', 'CGST', 'SGST', 'CESS']].sum().sum()
+                doc_type_stats[f'{dt}_PR_count'] = mask_pr.sum()
+                doc_type_stats[f'{dt}_PR_taxable'] = df_pr.loc[mask_pr, 'TAXABLE_VALUE'].sum()
+                doc_type_stats[f'{dt}_PR_tax'] = df_pr.loc[mask_pr, ['IGST', 'CGST', 'SGST', 'CESS']].sum().sum()
+            
+            # DASHBOARD METRICS
+            st.markdown("""
+            <div class="section-card animate-fade-in">
+                <h3><span class="icon">📊</span> Live Reconciliation Dashboard</h3>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            m1, m2, m3, m4, m5 = st.columns(5)
+            with m1:
+                st.markdown(f"""
+                <div class="metric-card">
+                    <div class="metric-label">📋 Total Records</div>
+                    <div class="metric-value">{total_records:,}</div>
+                    <div class="metric-delta neutral">All documents</div>
+                </div>
+                """, unsafe_allow_html=True)
+            with m2:
+                match_rate = (exact_count + suggested_count) / total_records * 100 if total_records > 0 else 0
+                st.markdown(f"""
+                <div class="metric-card">
+                    <div class="metric-label">✅ Match Rate</div>
+                    <div class="metric-value">{match_rate:.1f}%</div>
+                    <div class="metric-delta {'positive' if match_rate >= 80 else 'negative'}">
+                        {'↑ Excellent' if match_rate >= 90 else '↑ Good' if match_rate >= 80 else '↓ Review needed'}
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+            with m3:
+                st.markdown(f"""
+                <div class="metric-card">
+                    <div class="metric-label">🔍 Suggested</div>
+                    <div class="metric-value">{suggested_count:,}</div>
+                    <div class="metric-delta neutral">Needs review</div>
+                </div>
+                """, unsafe_allow_html=True)
+            with m4:
+                unclaimed_itc = merged_df[merged_df['MATCH_STATUS'] == 'Missing in PR']['TOTAL_TAX_2B'].sum()
+                st.markdown(f"""
+                <div class="metric-card">
+                    <div class="metric-label">💰 Unclaimed ITC</div>
+                    <div class="metric-value">₹{unclaimed_itc:,.0f}</div>
+                    <div class="metric-delta positive">Cash flow opportunity</div>
+                </div>
+                """, unsafe_allow_html=True)
+            with m5:
+                risky_claims = merged_df[merged_df['MATCH_STATUS'] == 'Missing in GSTR 2B']['TOTAL_TAX_PR'].sum()
+                st.markdown(f"""
+                <div class="metric-card">
+                    <div class="metric-label">⚠️ Risk Claims</div>
+                    <div class="metric-value">₹{risky_claims:,.0f}</div>
+                    <div class="metric-delta negative">Compliance risk</div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            # DOC_TYPE BREAKDOWN SECTION
+            st.markdown("""
+            <div class="section-card animate-fade-in">
+                <h3><span class="icon">📑</span> Document Type Breakdown</h3>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            col_dt1, col_dt2, col_dt3 = st.columns(3)
+            with col_dt1:
+                st.markdown(f"""
+                <div style="background: rgba(16, 185, 129, 0.1); border-radius: 12px; padding: 18px; border-left: 4px solid #10b981;">
+                    <strong style="font-size: 1.1rem;">📄 INVOICES</strong>
+                    <div style="display: flex; justify-content: space-between; margin: 10px 0;">
+                        <span>2B Count:</span><strong>{doc_type_stats['INVOICE_2B_count']}</strong>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; margin: 10px 0;">
+                        <span>PR Count:</span><strong>{doc_type_stats['INVOICE_PR_count']}</strong>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; margin: 10px 0;">
+                        <span>2B Taxable:</span><strong>₹{doc_type_stats['INVOICE_2B_taxable']:,.0f}</strong>
+                    </div>
+                    <div style="display: flex; justify-content: space-between;">
+                        <span>PR Taxable:</span><strong>₹{doc_type_stats['INVOICE_PR_taxable']:,.0f}</strong>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+            with col_dt2:
+                st.markdown(f"""
+                <div style="background: rgba(239, 68, 68, 0.1); border-radius: 12px; padding: 18px; border-left: 4px solid #ef4444;">
+                    <strong style="font-size: 1.1rem;">📉 CREDIT NOTES</strong>
+                    <div style="display: flex; justify-content: space-between; margin: 10px 0;">
+                        <span>2B Count:</span><strong>{doc_type_stats['CREDIT_2B_count']}</strong>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; margin: 10px 0;">
+                        <span>PR Count:</span><strong>{doc_type_stats['CREDIT_PR_count']}</strong>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; margin: 10px 0;">
+                        <span>2B Taxable:</span><strong style="color: #ef4444;">₹{doc_type_stats['CREDIT_2B_taxable']:,.0f}</strong>
+                    </div>
+                    <div style="display: flex; justify-content: space-between;">
+                        <span>PR Taxable:</span><strong style="color: #ef4444;">₹{doc_type_stats['CREDIT_PR_taxable']:,.0f}</strong>
+                    </div>
+                    <small style="color: var(--text-secondary);">* Negative values shown</small>
+                </div>
+                """, unsafe_allow_html=True)
+            with col_dt3:
+                st.markdown(f"""
+                <div style="background: rgba(245, 158, 11, 0.1); border-radius: 12px; padding: 18px; border-left: 4px solid #f59e0b;">
+                    <strong style="font-size: 1.1rem;">📈 DEBIT NOTES</strong>
+                    <div style="display: flex; justify-content: space-between; margin: 10px 0;">
+                        <span>2B Count:</span><strong>{doc_type_stats['DEBIT_2B_count']}</strong>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; margin: 10px 0;">
+                        <span>PR Count:</span><strong>{doc_type_stats['DEBIT_PR_count']}</strong>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; margin: 10px 0;">
+                        <span>2B Taxable:</span><strong>₹{doc_type_stats['DEBIT_2B_taxable']:,.0f}</strong>
+                    </div>
+                    <div style="display: flex; justify-content: space-between;">
+                        <span>PR Taxable:</span><strong>₹{doc_type_stats['DEBIT_PR_taxable']:,.0f}</strong>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            # AI INSIGHTS
+            st.markdown("""
+            <div class="section-card animate-fade-in">
+                <h3><span class="icon">🧠</span> AI-Powered Financial Insights</h3>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            insights = []
+            if dup_pr_count > 0:
+                insights.append({'type': 'warning', 'icon': '⚠️', 'title': 'Data Quality Alert', 'message': f"Found **{dup_pr_count} duplicate entries** in Purchase Register."})
+            if missing_pr > 0:
+                insights.append({'type': 'success', 'icon': '💡', 'title': 'Cash Flow Opportunity', 'message': f"**₹{unclaimed_itc:,.2f}** in ITC available in GSTR-2B but not claimed."})
+            if missing_2b > 0:
+                insights.append({'type': 'error', 'icon': '🚨', 'title': 'Compliance Risk', 'message': f"**₹{risky_claims:,.2f}** claimed in books but missing from GSTR-2B."})
+            if match_rate < 80:
+                insights.append({'type': 'warning', 'icon': '🔄', 'title': 'Reconciliation Health', 'message': f"Match rate is **{match_rate:.1f}%**. Review document numbering."})
+            elif match_rate >= 95:
+                insights.append({'type': 'success', 'icon': '✅', 'title': 'Excellent Health', 'message': f"Outstanding match rate of **{match_rate:.1f}%**!"})
+            if suggested_count > 0:
+                insights.append({'type': 'info', 'icon': '🕒', 'title': 'Date Mismatches', 'message': f"**{suggested_count} records** have date differences but match on other parameters."})
+            if doc_type_stats['CREDIT_2B_count'] != doc_type_stats['CREDIT_PR_count']:
+                insights.append({'type': 'warning', 'icon': '📉', 'title': 'Credit Note Mismatch', 'message': f"Credit note counts differ: {doc_type_stats['CREDIT_2B_count']} in 2B vs {doc_type_stats['CREDIT_PR_count']} in PR."})
+            if not insights:
+                insights.append({'type': 'success', 'icon': '🎉', 'title': 'All Clear', 'message': "No critical issues detected. Your GST reconciliation is healthy!"})
+            
+            for i, insight in enumerate(insights):
+                st.markdown(f"""
+                <div class="insight-card {insight['type']} animate-fade-in" style="animation-delay: {i*0.1}s">
+                    <div class="insight-title">{insight['icon']} {insight['title']}</div>
+                    <div class="insight-message">{insight['message']}</div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            # VISUALIZATIONS
+            st.markdown("""
+            <div class="section-card animate-fade-in">
+                <h3><span class="icon">📈</span> Visual Analytics</h3>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            tab1, tab2, tab3, tab4 = st.tabs(["📊 Status", "📑 Doc Types", "📅 Trends", "🔍 Details"])
+            
+            with tab1:
+                status_data = merged_df['MATCH_STATUS'].value_counts().reset_index()
+                status_data.columns = ['Status', 'Count']
+                color_map = {'Exact': '#10b981', 'Suggested': '#06b6d4', 'Value Mismatch': '#f97316', 'Doc Type Mismatch': '#8b5cf6', 'Cross-State (PAN Match)': '#6366f1', 'Missing in GSTR 2B': '#ef4444', 'Missing in PR': '#f59e0b', 'Other': '#64748b'}
+                fig_status = px.pie(status_data, values='Count', names='Status', color='Status', color_discrete_map=color_map, hole=0.5, title='Reconciliation Status Distribution')
+                fig_status.update_traces(textposition='inside', textinfo='percent+label')
+                fig_status.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', legend=dict(orientation='h', yanchor='bottom', y=-0.2, xanchor='center', x=0.5), height=450)
+                st.plotly_chart(fig_status, use_container_width=True)
+            
+            with tab2:
+                dt_data = pd.DataFrame({
+                    'Document Type': ['INVOICE', 'CREDIT', 'DEBIT'],
+                    'GSTR-2B Taxable': [doc_type_stats['INVOICE_2B_taxable'], doc_type_stats['CREDIT_2B_taxable'], doc_type_stats['DEBIT_2B_taxable']],
+                    'Purchase Register Taxable': [doc_type_stats['INVOICE_PR_taxable'], doc_type_stats['CREDIT_PR_taxable'], doc_type_stats['DEBIT_PR_taxable']]
+                })
+                fig_dt = px.bar(dt_data, x='Document Type', y=['GSTR-2B Taxable', 'Purchase Register Taxable'], barmode='group', title='Taxable Value by Document Type', labels={'value': 'Amount (₹)'})
+                fig_dt.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', height=450, legend=dict(orientation='h', y=-0.2))
+                st.plotly_chart(fig_dt, use_container_width=True)
+            
+            with tab3:
+                if 'MONTH_2B' in merged_df.columns:
+                    monthly = merged_df.groupby('MONTH_2B').agg({'TAXABLE_VALUE_2B': 'sum', 'TOTAL_TAX_2B': 'sum', 'TAXABLE_VALUE_PR': 'sum', 'TOTAL_TAX_PR': 'sum'}).reset_index().fillna(0)
+                    fig_monthly = go.Figure()
+                    fig_monthly.add_trace(go.Bar(x=monthly['MONTH_2B'], y=monthly['TAXABLE_VALUE_2B'], name='Taxable (2B)', marker_color=px.colors.qualitative.Set1[0]))
+                    fig_monthly.add_trace(go.Bar(x=monthly['MONTH_2B'], y=monthly['TAXABLE_VALUE_PR'], name='Taxable (PR)', marker_color=px.colors.qualitative.Set1[1]))
+                    fig_monthly.update_layout(barmode='group', title='Monthly Taxable Value Comparison', plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', height=450, legend=dict(orientation='h', y=-0.2), xaxis_tickangle=-45)
+                    st.plotly_chart(fig_monthly, use_container_width=True)
+            
+            with tab4:
+                col_f1, col_f2, col_f3 = st.columns(3)
+                with col_f1:
+                    status_filter = st.multiselect("Filter Status", merged_df['MATCH_STATUS'].unique().tolist(), default=merged_df['MATCH_STATUS'].unique().tolist())
+                with col_f2:
+                    search = st.text_input("🔎 Search Supplier", placeholder="Type to search...")
+                with col_f3:
+                    min_val = st.number_input("Min Value (₹)", min_value=0, value=0, step=1000)
+                
+                filtered = merged_df.copy()
+                if status_filter:
+                    filtered = filtered[filtered['MATCH_STATUS'].isin(status_filter)]
+                if search:
+                    filtered = filtered[filtered['SUPPLIER_NAME_COMBINED'].str.contains(search, case=False, na=False)]
+                if min_val > 0:
+                    filtered = filtered[(filtered['TAXABLE_VALUE_2B'].abs() >= min_val) | (filtered['TAXABLE_VALUE_PR'].abs() >= min_val)]
+                
+                display_cols = ['MATCH_STATUS', 'SUPPLIER_NAME_COMBINED', 'DOC_TYPE_2B', 'DOC_NUMBER_2B', 'DOC_NUMBER_PR', 'TAXABLE_VALUE_2B', 'TAXABLE_VALUE_PR', 'TOTAL_TAX_2B', 'TOTAL_TAX_PR', 'ITC_ELIGIBILITY']
+                st.dataframe(filtered[display_cols].head(100).style.format({'TAXABLE_VALUE_2B': '₹{:.2f}', 'TAXABLE_VALUE_PR': '₹{:.2f}', 'TOTAL_TAX_2B': '₹{:.2f}', 'TOTAL_TAX_PR': '₹{:.2f}'}).map(lambda x: f'<span class="status-badge status-{str(x).lower().replace(" ", "-")}">{x}</span>' if x in ['Exact', 'Suggested', 'Value Mismatch', 'Missing in GSTR 2B', 'Missing in PR'] else x, subset=['MATCH_STATUS']), use_container_width=True, hide_index=True)
+            
+            # EXPORT SECTION
+            st.markdown("""
+            <div class="section-card animate-fade-in">
+                <h3><span class="icon">📤</span> Export Reconciliation Report</h3>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            col_export1, col_export2 = st.columns([3, 1])
+            with col_export1:
+                st.markdown("""
+                <div style="background: rgba(99, 102, 241, 0.05); border-radius: 12px; padding: 20px; border: 1px solid var(--border-light);">
+                    <strong>📋 Report Includes:</strong>
+                    <ul style="margin: 10px 0 0 20px; color: var(--text-secondary); line-height: 1.8;">
+                        <li>Executive Dashboard with charts</li>
+                        <li>Detailed reconciliation with DOC_TYPE breakdown</li>
+                        <li>Credit/Debit Note handling with negative values</li>
+                        <li>Summary tables matching GST portal format</li>
+                        <li>Raw data sheets for audit trail</li>
+                        <li><strong>DOC_TYPE dropdown validation (INVOICE/CREDIT/DEBIT)</strong></li>
+                        <li>Month format: JANUARY-25, FEBRUARY-25, etc.</li>
+                    </ul>
+                </div>
+                """, unsafe_allow_html=True)
+            with col_export2:
+                # Create Excel with dropdown validation
+                output = io.BytesIO()
+                with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                    recon_df = merged_df[['MATCH_STATUS', 'MATCH_REASON', 'SUPPLIER_NAME_COMBINED', 'SUPPLIER_GSTIN_2B', 'SUPPLIER_GSTIN_PR', 'DOC_NUMBER_2B', 'DOC_NUMBER_PR', 'DOC_DATE_2B', 'DOC_DATE_PR', 'DOC_TYPE_2B', 'DOC_TYPE_PR', 'MONTH_2B', 'MONTH_PR', 'TAXABLE_VALUE_2B', 'TAXABLE_VALUE_PR', 'TOTAL_TAX_2B', 'TOTAL_TAX_PR', 'ITC_ELIGIBILITY']].copy()
+                    recon_df.columns = ['Match Status', 'Match Reason', 'Supplier Name', 'Supplier GSTIN (2B)', 'Supplier GSTIN (PR)', 'Document Number (2B)', 'Document Number (PR)', 'Document Date (2B)', 'Document Date (PR)', 'Doc Type (2B)', 'Doc Type (PR)', 'Month (2B)', 'Month (PR)', 'Taxable Value (2B)', 'Taxable Value (PR)', 'Total Tax (2B)', 'Total Tax (PR)', 'ITC Eligibility']
+                    recon_df.to_excel(writer, sheet_name='Reconciliation', index=False, startrow=2)
+                    
+                    workbook = writer.book
+                    worksheet = writer.sheets['Reconciliation']
+                    
+                    # Add header format
+                    header_format = workbook.add_format({'bold': True, 'bg_color': '#1e40af', 'font_color': 'white', 'border': 1, 'align': 'center'})
+                    for col_num, col_name in enumerate(recon_df.columns):
+                        worksheet.write(2, col_num, col_name, header_format)
+                    
+                    # ✅ Add DOC_TYPE dropdown validation
+                    if add_dropdown_validation:
+                        # Create a list validation for DOC_TYPE columns
+                        worksheet.data_validation('J3:J10000', {'validate': 'list', 'source': ['INVOICE', 'CREDIT', 'DEBIT']})
+                        worksheet.data_validation('K3:K10000', {'validate': 'list', 'source': ['INVOICE', 'CREDIT', 'DEBIT']})
+                    
+                    worksheet.set_column('A:A', 18)
+                    worksheet.set_column('B:B', 45)
+                    worksheet.set_column('C:C', 35)
+                    worksheet.set_column('D:E', 20)
+                    worksheet.set_column('F:G', 22)
+                    worksheet.set_column('H:I', 16)
+                    worksheet.set_column('J:K', 14)
+                    worksheet.set_column('L:M', 14)
+                    worksheet.set_column('N:Q', 16)
+                    worksheet.set_column('R:R', 18)
+                
+                st.download_button(label="⚡ Download Report", data=output.getvalue(), file_name=f"GST_Recon_{datetime.now().strftime('%Y%m%d')}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
+            
+            st.success(f"✅ Ready! Processed {total_records:,} records with proper Credit/Debit Note handling and dropdown validation.")
+    
+    except Exception as e:
+        st.error(f"❌ Processing Error: {str(e)}")
+        with st.expander("🔧 Technical Details"):
+            st.exception(e)
+            st.info("💡 Ensure files follow the sample template format with DOC_TYPE column (INVOICE/CREDIT/DEBIT) and negative values for Credit Notes.")
+
+else:
+    st.markdown("""
+    <div class="section-card animate-fade-in" style="text-align: center; padding: 64px 44px;">
+        <div style="font-size: 4.5rem; margin-bottom: 24px;">🧾✨</div>
+        <h2 style="margin: 0 0 18px 0; font-size: 2rem;">Welcome to GST Recon Pro</h2>
+        <p style="color: var(--text-secondary); font-size: 1.15rem; max-width: 650px; margin: 0 auto 36px auto; line-height: 1.7;">
+            Upload your GSTR-2B and Purchase Register files to begin intelligent reconciliation. 
+            Our AI-powered engine matches invoices, handles Credit/Debit Notes with negative values, 
+            identifies discrepancies, and generates compliance-ready reports.
+        </p>
+        <div class="quick-actions">
+            <div class="quick-action-btn"><span class="icon">📁</span><span class="label">Upload Files</span></div>
+            <div class="quick-action-btn"><span class="icon">📥</span><span class="label">Get Samples</span></div>
+            <div class="quick-action-btn"><span class="icon">📉</span><span class="label">CDN Support</span></div>
+            <div class="quick-action-btn"><span class="icon">📊</span><span class="label">Live Insights</span></div>
+        </div>
+        <div style="margin-top: 44px; padding-top: 28px; border-top: 1px solid var(--border-light);">
+            <p style="color: var(--text-secondary); font-size: 0.95rem; line-height: 1.6;">
+                <strong>💡 Pro Tips:</strong><br>
+                • Credit Notes should have <strong>negative taxable/tax values</strong> for proper matching<br>
+                • Use DOC_TYPE dropdown: INVOICE / CREDIT / DEBIT<br>
+                • Month format: <strong>JANUARY-25, FEBRUARY-25</strong>, etc.
+            </p>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+# ================= FOOTER =================
+st.markdown("""
+<div class="footer">
+    <div class="brand">🧾 GST Recon Pro</div>
+    <div class="credits">Enterprise GST Reconciliation Engine</div>
+    <div class="credits">Developed by <strong>ABHISHEK JAKKULA</strong> • jakkulaabhishek5@gmail.com</div>
+    <div class="version">v3.2 • Last Updated: May 2026</div>
+    <div style="margin-top: 24px; display: flex; justify-content: center; gap: 24px; flex-wrap: wrap;">
+        <a href="#" style="color: var(--text-secondary); text-decoration: none; font-size: 0.95rem;">📚 Documentation</a>
+        <a href="#" style="color: var(--text-secondary); text-decoration: none; font-size: 0.95rem;">🎥 Tutorials</a>
+        <a href="#" style="color: var(--text-secondary); text-decoration: none; font-size: 0.95rem;">🔧 Support</a>
+    </div>
 </div>
 """, unsafe_allow_html=True)
