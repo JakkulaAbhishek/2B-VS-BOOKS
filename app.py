@@ -1,24 +1,24 @@
 # ============================================================================
-# ✨ GST Recon Pro v5.0 - Enterprise GST Reconciliation Engine
+# ✨ GST Recon Pro v6.0 - Enterprise GST Reconciliation Engine
 # ============================================================================
 # Author: Abhishek Jakkula
 # Email: jakkulaabhishek5@gmail.com
-# Version: 5.0.0 (Production Ready)
+# Version: 6.0.0 (Professional Format with Subtotals)
 # Last Updated: May 2026
 # License: Proprietary - Enterprise Edition
 # ============================================================================
 # 
-# KEY FIXES IN v5.0:
-# ✅ Fixed pandas Styler CSS formatting error - now returns proper CSS properties
-# ✅ Enhanced error handling with graceful fallbacks
-# ✅ Added comprehensive input validation
-# ✅ Improved performance for large datasets
-# ✅ Added batch processing support
-# ✅ Enhanced visualizations with better interactivity
-# ✅ Added export progress indicators
-# ✅ Improved mobile responsiveness
-# ✅ Added data preview before processing
-# ✅ Enhanced audit logging
+# KEY FEATURES IN v6.0:
+# ✅ Professional reconciliation sheet matching uploaded format
+# ✅ All 30+ columns as per your requirements
+# ✅ Subtotals at top of reconciliation sheet
+# ✅ Enhanced Excel formatting with color coding
+# ✅ Summary dashboard with key metrics
+# ✅ Advanced filtering and search capabilities
+# ✅ Multi-sheet export with proper formatting
+# ✅ Automated data validation
+# ✅ Comprehensive audit trail
+# ✅ Performance optimized for large datasets
 # ============================================================================
 
 # ==================== IMPORTS ====================
@@ -44,6 +44,7 @@ from plotly.subplots import make_subplots
 import xlsxwriter
 from io import BytesIO
 from difflib import SequenceMatcher
+import os
 
 # Suppress warnings
 warnings.filterwarnings('ignore')
@@ -59,14 +60,14 @@ logger = logging.getLogger(__name__)
 
 # ==================== CONFIG & UI SETUP ====================
 st.set_page_config(
-    page_title="✨ GST Recon Pro v5.0", 
+    page_title="✨ GST Recon Pro v6.0", 
     page_icon="🧾",
     layout="wide", 
     initial_sidebar_state="expanded",
     menu_items={
         'Get Help': 'mailto:jakkulaabhishek5@gmail.com',
         'Report a bug': "https://github.com/abhishekjakkula/gst-recon-pro/issues",
-        'About': "# GST Recon Pro v5.0\nEnterprise GST Reconciliation Engine\n\n© 2026 Abhishek Jakkula. All rights reserved."
+        'About': "# GST Recon Pro v6.0\nEnterprise GST Reconciliation Engine\n\n© 2026 Abhishek Jakkula. All rights reserved."
     }
 )
 
@@ -519,7 +520,6 @@ st.markdown("""
     .doc-type-credit { background: rgba(239, 68, 68, 0.15); color: #991b1b; }
     .doc-type-debit { background: rgba(245, 158, 11, 0.15); color: #92400e; }
 
-    /* ✅ FIXED: Proper CSS for dataframe cells - these are now actual CSS properties */
     .df-exact { color: #065f46 !important; background-color: rgba(16, 185, 129, 0.1) !important; font-weight: 600 !important; }
     .df-suggested { color: #0e7490 !important; background-color: rgba(6, 182, 212, 0.1) !important; font-weight: 600 !important; }
     .df-value-mismatch { color: #92400e !important; background-color: rgba(245, 158, 11, 0.1) !important; font-weight: 600 !important; }
@@ -558,6 +558,40 @@ st.markdown("""
     @keyframes slideIn {
         from { transform: translateX(100%); opacity: 0; }
         to { transform: translateX(0); opacity: 1; }
+    }
+
+    .summary-box {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border-radius: var(--radius-lg);
+        padding: 24px;
+        color: white;
+        margin: 16px 0;
+        box-shadow: var(--shadow-lg);
+    }
+    .summary-box h4 {
+        margin: 0 0 16px 0;
+        font-size: 1.2rem;
+        font-weight: 700;
+    }
+    .summary-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 16px;
+    }
+    .summary-item {
+        background: rgba(255,255,255,0.1);
+        padding: 16px;
+        border-radius: var(--radius-md);
+        backdrop-filter: blur(10px);
+    }
+    .summary-item .label {
+        font-size: 0.85rem;
+        opacity: 0.9;
+        margin-bottom: 4px;
+    }
+    .summary-item .value {
+        font-size: 1.5rem;
+        font-weight: 700;
     }
 </style>
 
@@ -600,7 +634,7 @@ with st.sidebar:
     <div style="text-align: center; padding: 24px 0; border-bottom: 1px solid rgba(255,255,255,0.1); margin-bottom: 28px;">
         <div style="font-size: 3rem; margin-bottom: 10px;">🧾</div>
         <h3 style="margin: 0; color: #fff; font-size: 1.4rem;">GST Recon Pro</h3>
-        <p style="margin: 6px 0 0 0; color: #94a3b8; font-size: 0.9rem;">v5.0 • Enterprise Edition</p>
+        <p style="margin: 6px 0 0 0; color: #94a3b8; font-size: 0.9rem;">v6.0 • Enterprise Edition</p>
     </div>
     """, unsafe_allow_html=True)
     
@@ -647,6 +681,8 @@ with st.sidebar:
         add_dropdown_validation = st.checkbox("Add DOC_TYPE Dropdown in Excel", value=True,
                                              help="Add data validation dropdown for DOC_TYPE column")
         export_format = st.selectbox("Primary Export Format", ["Excel (.xlsx)", "CSV (.csv)", "Both"], index=0)
+        include_subtotals = st.checkbox("Include Subtotals in Export", value=True,
+                                       help="Add subtotal rows for each match status")
     
     st.markdown("---")
     with st.expander("❓ Help & Documentation"):
@@ -720,11 +756,11 @@ with st.sidebar:
 # ==================== HEADER SECTION ====================
 st.markdown("""
 <div class="main-header animate-fade-in">
-    <h1>✨ GST Recon Pro v5.0</h1>
+    <h1>✨ GST Recon Pro v6.0</h1>
     <p class="subtitle">
         AI-Powered GST Reconciliation • Match GSTR-2B with Purchase Register • 
         Real-time Insights • Compliance-Ready Reports • Credit/Debit Note Support • 
-        Enterprise-Grade Security & Performance
+        Enterprise-Grade Security & Performance • Professional Format Export
     </p>
 </div>
 """, unsafe_allow_html=True)
@@ -902,7 +938,6 @@ def generate_file_hash(file_bytes: bytes) -> str:
     return hashlib.md5(file_bytes).hexdigest()
 
 
-# ==================== ✅ FIXED: CSS Styling Function for Dataframe ====================
 def get_status_css_class(status_value) -> str:
     """
     ✅ Returns proper CSS property string for pandas Styler
@@ -937,39 +972,40 @@ def generate_sample_2b_template() -> bytes:
     """Generate sample GSTR-2B with proper DOC_TYPE breakdown and negative CDN values"""
     cols = [
         "SUPPLIER GSTIN", "DOCUMENT NUMBER", "TAXABLE VALUE", "IGST", "CGST", "SGST", 
-        "SUPPLIER NAME", "MY GSTIN", "DOCUMENT DATE", "MONTH", "DOC_TYPE", "REVERSE_CHARGE"
+        "SUPPLIER NAME", "MY GSTIN", "DOCUMENT DATE", "MONTH", "DOC_TYPE", "REVERSE_CHARGE",
+        "SECTION_NAME"
     ]
     
     sample_data = [
         # INVOICES - Exact Matches
-        ["36CNNPD6299J1ZB", "11/2023-24", 7500.00, 0, 675.00, 675.00, "NESHWARI ENGINEERING AND SERVICES", "36ADXFS5154R1ZU", "24-07-2023", "JULY-23", "INVOICE", "NO"],
-        ["08AAACM8473A1ZL", "MEC-439-2023", 13150.00, 2367.00, 0, 0, "METALLIZING EQUIPMENT COMPANY P. LTD.", "36ADXFS5154R1ZU", "26-05-2023", "MAY-23", "INVOICE", "NO"],
-        ["36ADUPV8726H1ZM", "ET/LSR/2324/1616", 390.00, 0, 35.10, 35.10, "M/S EXCELANT TECHNOLOGIES", "36ADXFS5154R1ZU", "20-01-2024", "JANUARY-24", "INVOICE", "NO"],
-        ["36AAFCS6791L1ZN", "23-24/4406", 123500.00, 0, 11115.00, 11115.00, "SAI DEEPA ROCK DRILLS PVT LTD", "36ADXFS5154R1ZU", "02-01-2024", "JANUARY-24", "INVOICE", "NO"],
-        ["36BDJPM4292D2ZF", "11/23-24", 153026.00, 0, 13772.34, 13772.34, "SANJAY MANDAL LABOUR CONTRACTOR", "36ADXFS5154R1ZU", "01-05-2023", "MAY-23", "INVOICE", "NO"],
+        ["36CNNPD6299J1ZB", "11/2023-24", 7500.00, 0, 675.00, 675.00, "NESHWARI ENGINEERING AND SERVICES", "36ADXFS5154R1ZU", "24-07-2023", "JULY-23", "INVOICE", "NO", "B2B"],
+        ["08AAACM8473A1ZL", "MEC-439-2023", 13150.00, 2367.00, 0, 0, "METALLIZING EQUIPMENT COMPANY P. LTD.", "36ADXFS5154R1ZU", "26-05-2023", "MAY-23", "INVOICE", "NO", "B2B"],
+        ["36ADUPV8726H1ZM", "ET/LSR/2324/1616", 390.00, 0, 35.10, 35.10, "M/S EXCELANT TECHNOLOGIES", "36ADXFS5154R1ZU", "20-01-2024", "JANUARY-24", "INVOICE", "NO", "B2B"],
+        ["36AAFCS6791L1ZN", "23-24/4406", 123500.00, 0, 11115.00, 11115.00, "SAI DEEPA ROCK DRILLS PVT LTD", "36ADXFS5154R1ZU", "02-01-2024", "JANUARY-24", "INVOICE", "NO", "B2B"],
+        ["36BDJPM4292D2ZF", "11/23-24", 153026.00, 0, 13772.34, 13772.34, "SANJAY MANDAL LABOUR CONTRACTOR", "36ADXFS5154R1ZU", "01-05-2023", "MAY-23", "INVOICE", "NO", "B2B"],
         
         # CREDIT NOTES (NEGATIVE VALUES) - Exact Matches
-        ["36AFKPD6156R1ZT", "23", -5042.36, 0, -453.81, -453.81, "M/S SRI SATYA TECHNOLOGIES", "36ADXFS5154R1ZU", "22-02-2024", "FEBRUARY-24", "CREDIT", "NO"],
-        ["36AADCR6281N1ZT", "CN-2024-001", -2500.00, 0, -225.00, -225.00, "CARE HEALTH INSURANCE LIMITED", "36ADXFS5154R1ZU", "15-03-2024", "MARCH-24", "CREDIT", "NO"],
-        ["08AAACM8473A1ZL", "CN-MEC-001", -1500.00, -270.00, 0, 0, "METALLIZING EQUIPMENT COMPANY P. LTD.", "36ADXFS5154R1ZU", "10-01-2024", "JANUARY-24", "CREDIT", "NO"],
+        ["36AFKPD6156R1ZT", "23", -5042.36, 0, -453.81, -453.81, "M/S SRI SATYA TECHNOLOGIES", "36ADXFS5154R1ZU", "22-02-2024", "FEBRUARY-24", "CREDIT", "NO", "CDN"],
+        ["36AADCR6281N1ZT", "CN-2024-001", -2500.00, 0, -225.00, -225.00, "CARE HEALTH INSURANCE LIMITED", "36ADXFS5154R1ZU", "15-03-2024", "MARCH-24", "CREDIT", "NO", "CDN"],
+        ["08AAACM8473A1ZL", "CN-MEC-001", -1500.00, -270.00, 0, 0, "METALLIZING EQUIPMENT COMPANY P. LTD.", "36ADXFS5154R1ZU", "10-01-2024", "JANUARY-24", "CREDIT", "NO", "CDN"],
         
         # DEBIT NOTES - Exact Matches
-        ["36CNNPD6299J1ZB", "DN-2024-001", 1200.00, 0, 108.00, 108.00, "NESHWARI ENGINEERING AND SERVICES", "36ADXFS5154R1ZU", "05-03-2024", "MARCH-24", "DEBIT", "NO"],
-        ["36AAFCS6791L1ZN", "DN-SDR-002", 3500.00, 0, 315.00, 315.00, "SAI DEEPA ROCK DRILLS PVT LTD", "36ADXFS5154R1ZU", "20-02-2024", "FEBRUARY-24", "DEBIT", "NO"],
+        ["36CNNPD6299J1ZB", "DN-2024-001", 1200.00, 0, 108.00, 108.00, "NESHWARI ENGINEERING AND SERVICES", "36ADXFS5154R1ZU", "05-03-2024", "MARCH-24", "DEBIT", "NO", "B2B"],
+        ["36AAFCS6791L1ZN", "DN-SDR-002", 3500.00, 0, 315.00, 315.00, "SAI DEEPA ROCK DRILLS PVT LTD", "36ADXFS5154R1ZU", "20-02-2024", "FEBRUARY-24", "DEBIT", "NO", "B2B"],
         
         # SUGGESTED MATCHES (Date differs within tolerance)
-        ["36DGLPP5363P1ZG", "ST/23-24/39", 23650.00, 0, 2128.50, 2128.50, "S SQUARE INDUSTRIES", "36ADXFS5154R1ZU", "03-05-2023", "MAY-23", "INVOICE", "NO"],
-        ["36ADXFS5161J1ZB", "INV/23-24/0092", 2470.00, 0, 222.30, 222.30, "SD WoT", "36ADXFS5154R1ZU", "07-07-2023", "JULY-23", "INVOICE", "NO"],
-        ["27AIXPL7527J1ZF", "VT/23-24/045", 14700.00, 2646.00, 0, 0, "VICTORY TOOLS", "36ADXFS5154R1ZU", "25-04-2023", "APRIL-23", "INVOICE", "NO"],
-        ["27AIXPL7527J1ZF", "VT/23-24/312", 31290.00, 5632.20, 0, 0, "VICTORY TOOLS", "36ADXFS5154R1ZU", "15-01-2024", "JANUARY-24", "INVOICE", "NO"],
+        ["36DGLPP5363P1ZG", "ST/23-24/39", 23650.00, 0, 2128.50, 2128.50, "S SQUARE INDUSTRIES", "36ADXFS5154R1ZU", "03-05-2023", "MAY-23", "INVOICE", "NO", "B2B"],
+        ["36ADXFS5161J1ZB", "INV/23-24/0092", 2470.00, 0, 222.30, 222.30, "SD WoT", "36ADXFS5154R1ZU", "07-07-2023", "JULY-23", "INVOICE", "NO", "B2B"],
+        ["27AIXPL7527J1ZF", "VT/23-24/045", 14700.00, 2646.00, 0, 0, "VICTORY TOOLS", "36ADXFS5154R1ZU", "25-04-2023", "APRIL-23", "INVOICE", "NO", "B2B"],
+        ["27AIXPL7527J1ZF", "VT/23-24/312", 31290.00, 5632.20, 0, 0, "VICTORY TOOLS", "36ADXFS5154R1ZU", "15-01-2024", "JANUARY-24", "INVOICE", "NO", "B2B"],
         
         # MISSING IN PR (Present in 2B only)
-        ["36AADCR6281N1ZT", "67186859-1D", 8579.40, 0, 772.11, 772.11, "CARE HEALTH INSURANCE LIMITED", "36ADXFS5154R1ZU", "01-01-2024", "JANUARY-24", "INVOICE", "NO"],
-        ["36CKUPB7102C1ZF", "BEW/23-24/53", 3500.00, 0, 315.00, 315.00, "BALAJI ENGINEERING WORKS", "36ADXFS5154R1ZU", "29-09-2023", "SEPTEMBER-23", "INVOICE", "NO"],
-        ["36AAJCS4517L1ZZ", "362311I000806960", 11388.88, 0, 1025.00, 1025.00, "STAR HEALTH AND ALLIED INSURANCE COMPANY LIMITED", "36ADXFS5154R1ZU", "13-11-2023", "NOVEMBER-23", "INVOICE", "NO"],
+        ["36AADCR6281N1ZT", "67186859-1D", 8579.40, 0, 772.11, 772.11, "CARE HEALTH INSURANCE LIMITED", "36ADXFS5154R1ZU", "01-01-2024", "JANUARY-24", "INVOICE", "NO", "B2B"],
+        ["36CKUPB7102C1ZF", "BEW/23-24/53", 3500.00, 0, 315.00, 315.00, "BALAJI ENGINEERING WORKS", "36ADXFS5154R1ZU", "29-09-2023", "SEPTEMBER-23", "INVOICE", "NO", "B2B"],
+        ["36AAJCS4517L1ZZ", "362311I000806960", 11388.88, 0, 1025.00, 1025.00, "STAR HEALTH AND ALLIED INSURANCE COMPANY LIMITED", "36ADXFS5154R1ZU", "13-11-2023", "NOVEMBER-23", "INVOICE", "NO", "B2B"],
         
         # VALUE MISMATCH EXAMPLE
-        ["36AGIPG4790K1Z0", "GST-23-24/157", 4582.00, 0, 412.38, 412.38, "S K ENGINEERS", "36ADXFS5154R1ZU", "06-07-2023", "JULY-23", "INVOICE", "NO"],
+        ["36AGIPG4790K1Z0", "GST-23-24/157", 4582.00, 0, 412.38, 412.38, "S K ENGINEERS", "36ADXFS5154R1ZU", "06-07-2023", "JULY-23", "INVOICE", "NO", "B2B"],
     ]
     
     df_sample = pd.DataFrame(sample_data, columns=cols)
@@ -994,7 +1030,7 @@ def generate_sample_2b_template() -> bytes:
         worksheet.set_column('H:H', 20)
         worksheet.set_column('I:I', 14)
         worksheet.set_column('J:J', 14)
-        worksheet.set_column('K:L', 14)
+        worksheet.set_column('K:M', 14)
         
         worksheet.data_validation('K2:K1000', {'validate': 'list', 'source': ['INVOICE', 'CREDIT', 'DEBIT']})
     
@@ -1006,39 +1042,39 @@ def generate_sample_books_template() -> bytes:
     cols = [
         "SUPPLIER GSTIN", "DOCUMENT NUMBER", "TAXABLE VALUE", "IGST", "CGST", "SGST", 
         "SUPPLIER NAME", "MY GSTIN", "DOCUMENT DATE", "MONTH", "DOC_TYPE", "REVERSE_CHARGE",
-        "ITC_CLAIM_TYPE", "PLACE_OF_SUPPLY"
+        "ITC_CLAIM_TYPE", "PLACE_OF_SUPPLY", "SECTION_NAME"
     ]
     
     sample_data = [
         # INVOICES - Exact Matches
-        ["36CNNPD6299J1ZB", "11/2023-24", 7500.00, 0, 675.00, 675.00, "NESHWARI ENGINEERING AND SERVICES", "36ADXFS5154R1ZU", "24-07-2023", "JULY-23", "INVOICE", "NO", "ELIGIBLE", "TELANGANA"],
-        ["08AAACM8473A1ZL", "MEC-439-2023", 13150.00, 2367.00, 0, 0, "METALLIZING EQUIPMENT COMPANY P. LTD.", "36ADXFS5154R1ZU", "26-05-2023", "MAY-23", "INVOICE", "NO", "ELIGIBLE", "TELANGANA"],
-        ["36ADUPV8726H1ZM", "ET/LSR/2324/1616", 390.00, 0, 35.10, 35.10, "M/S EXCELANT TECHNOLOGIES", "36ADXFS5154R1ZU", "20-01-2024", "JANUARY-24", "INVOICE", "NO", "ELIGIBLE", "TELANGANA"],
-        ["36AAFCS6791L1ZN", "23-24/4406", 123500.00, 0, 11115.00, 11115.00, "SAI DEEPA ROCK DRILLS PVT LTD", "36ADXFS5154R1ZU", "02-01-2024", "JANUARY-24", "INVOICE", "NO", "ELIGIBLE", "TELANGANA"],
-        ["36BDJPM4292D2ZF", "11/23-24", 153026.00, 0, 13772.34, 13772.34, "SANJAY MANDAL LABOUR CONTRACTOR", "36ADXFS5154R1ZU", "01-05-2023", "MAY-23", "INVOICE", "NO", "ELIGIBLE", "TELANGANA"],
+        ["36CNNPD6299J1ZB", "11/2023-24", 7500.00, 0, 675.00, 675.00, "NESHWARI ENGINEERING AND SERVICES", "36ADXFS5154R1ZU", "24-07-2023", "JULY-23", "INVOICE", "NO", "ELIGIBLE", "TELANGANA", "B2B"],
+        ["08AAACM8473A1ZL", "MEC-439-2023", 13150.00, 2367.00, 0, 0, "METALLIZING EQUIPMENT COMPANY P. LTD.", "36ADXFS5154R1ZU", "26-05-2023", "MAY-23", "INVOICE", "NO", "ELIGIBLE", "TELANGANA", "B2B"],
+        ["36ADUPV8726H1ZM", "ET/LSR/2324/1616", 390.00, 0, 35.10, 35.10, "M/S EXCELANT TECHNOLOGIES", "36ADXFS5154R1ZU", "20-01-2024", "JANUARY-24", "INVOICE", "NO", "ELIGIBLE", "TELANGANA", "B2B"],
+        ["36AAFCS6791L1ZN", "23-24/4406", 123500.00, 0, 11115.00, 11115.00, "SAI DEEPA ROCK DRILLS PVT LTD", "36ADXFS5154R1ZU", "02-01-2024", "JANUARY-24", "INVOICE", "NO", "ELIGIBLE", "TELANGANA", "B2B"],
+        ["36BDJPM4292D2ZF", "11/23-24", 153026.00, 0, 13772.34, 13772.34, "SANJAY MANDAL LABOUR CONTRACTOR", "36ADXFS5154R1ZU", "01-05-2023", "MAY-23", "INVOICE", "NO", "ELIGIBLE", "TELANGANA", "B2B"],
         
         # CREDIT NOTES (NEGATIVE VALUES) - Exact Matches
-        ["36AFKPD6156R1ZT", "23", -5042.36, 0, -453.81, -453.81, "M/S SRI SATYA TECHNOLOGIES", "36ADXFS5154R1ZU", "22-02-2024", "FEBRUARY-24", "CREDIT", "NO", "ELIGIBLE", "TELANGANA"],
-        ["36AADCR6281N1ZT", "CN-2024-001", -2500.00, 0, -225.00, -225.00, "CARE HEALTH INSURANCE LIMITED", "36ADXFS5154R1ZU", "15-03-2024", "MARCH-24", "CREDIT", "NO", "ELIGIBLE", "TELANGANA"],
-        ["08AAACM8473A1ZL", "CN-MEC-001", -1500.00, -270.00, 0, 0, "METALLIZING EQUIPMENT COMPANY P. LTD.", "36ADXFS5154R1ZU", "10-01-2024", "JANUARY-24", "CREDIT", "NO", "ELIGIBLE", "TELANGANA"],
+        ["36AFKPD6156R1ZT", "23", -5042.36, 0, -453.81, -453.81, "M/S SRI SATYA TECHNOLOGIES", "36ADXFS5154R1ZU", "22-02-2024", "FEBRUARY-24", "CREDIT", "NO", "ELIGIBLE", "TELANGANA", "CDN"],
+        ["36AADCR6281N1ZT", "CN-2024-001", -2500.00, 0, -225.00, -225.00, "CARE HEALTH INSURANCE LIMITED", "36ADXFS5154R1ZU", "15-03-2024", "MARCH-24", "CREDIT", "NO", "ELIGIBLE", "TELANGANA", "CDN"],
+        ["08AAACM8473A1ZL", "CN-MEC-001", -1500.00, -270.00, 0, 0, "METALLIZING EQUIPMENT COMPANY P. LTD.", "36ADXFS5154R1ZU", "10-01-2024", "JANUARY-24", "CREDIT", "NO", "ELIGIBLE", "TELANGANA", "CDN"],
         
         # DEBIT NOTES - Exact Matches
-        ["36CNNPD6299J1ZB", "DN-2024-001", 1200.00, 0, 108.00, 108.00, "NESHWARI ENGINEERING AND SERVICES", "36ADXFS5154R1ZU", "05-03-2024", "MARCH-24", "DEBIT", "NO", "ELIGIBLE", "TELANGANA"],
-        ["36AAFCS6791L1ZN", "DN-SDR-002", 3500.00, 0, 315.00, 315.00, "SAI DEEPA ROCK DRILLS PVT LTD", "36ADXFS5154R1ZU", "20-02-2024", "FEBRUARY-24", "DEBIT", "NO", "ELIGIBLE", "TELANGANA"],
+        ["36CNNPD6299J1ZB", "DN-2024-001", 1200.00, 0, 108.00, 108.00, "NESHWARI ENGINEERING AND SERVICES", "36ADXFS5154R1ZU", "05-03-2024", "MARCH-24", "DEBIT", "NO", "ELIGIBLE", "TELANGANA", "B2B"],
+        ["36AAFCS6791L1ZN", "DN-SDR-002", 3500.00, 0, 315.00, 315.00, "SAI DEEPA ROCK DRILLS PVT LTD", "36ADXFS5154R1ZU", "20-02-2024", "FEBRUARY-24", "DEBIT", "NO", "ELIGIBLE", "TELANGANA", "B2B"],
         
         # SUGGESTED MATCHES (Date differs within tolerance)
-        ["36DGLPP5363P1ZG", "ST/23-24/39", 23650.00, 0, 2128.50, 2128.50, "S SQUARE INDUSTRIES", "36ADXFS5154R1ZU", "01-06-2023", "JUNE-23", "INVOICE", "NO", "ELIGIBLE", "TELANGANA"],
-        ["36ADXFS5161J1ZB", "INV/23-24/0092", 2470.00, 0, 222.30, 222.30, "SD WoT", "36ADXFS5154R1ZU", "01-09-2023", "SEPTEMBER-23", "INVOICE", "NO", "ELIGIBLE", "TELANGANA"],
-        ["27AIXPL7527J1ZF", "VT/23-24/045", 14700.00, 2646.00, 0, 0, "VICTORY TOOLS", "36ADXFS5154R1ZU", "01-05-2023", "MAY-23", "INVOICE", "NO", "ELIGIBLE", "TELANGANA"],
-        ["27AIXPL7527J1ZF", "VT/23-24/312", 31290.00, 5632.20, 0, 0, "VICTORY TOOLS", "36ADXFS5154R1ZU", "01-02-2024", "FEBRUARY-24", "INVOICE", "NO", "ELIGIBLE", "TELANGANA"],
+        ["36DGLPP5363P1ZG", "ST/23-24/39", 23650.00, 0, 2128.50, 2128.50, "S SQUARE INDUSTRIES", "36ADXFS5154R1ZU", "01-06-2023", "JUNE-23", "INVOICE", "NO", "ELIGIBLE", "TELANGANA", "B2B"],
+        ["36ADXFS5161J1ZB", "INV/23-24/0092", 2470.00, 0, 222.30, 222.30, "SD WoT", "36ADXFS5154R1ZU", "01-09-2023", "SEPTEMBER-23", "INVOICE", "NO", "ELIGIBLE", "TELANGANA", "B2B"],
+        ["27AIXPL7527J1ZF", "VT/23-24/045", 14700.00, 2646.00, 0, 0, "VICTORY TOOLS", "36ADXFS5154R1ZU", "01-05-2023", "MAY-23", "INVOICE", "NO", "ELIGIBLE", "TELANGANA", "B2B"],
+        ["27AIXPL7527J1ZF", "VT/23-24/312", 31290.00, 5632.20, 0, 0, "VICTORY TOOLS", "36ADXFS5154R1ZU", "01-02-2024", "FEBRUARY-24", "INVOICE", "NO", "ELIGIBLE", "TELANGANA", "B2B"],
         
         # MISSING IN 2B (Present in PR only)
-        ["36AAGCE1603E1Z6", "EDT/SB/2223/013", 79200.00, 0, 4752.00, 4752.00, "EXIGENT DRILLING TECHNOLOGIES PRIVATE LIMITED", "36ADXFS5154R1ZU", "01-04-2023", "APRIL-23", "INVOICE", "NO", "ELIGIBLE", "TELANGANA"],
-        ["36BDJPM4292D2ZF", "106/22-23", 211868.00, 0, 19068.12, 19068.12, "SANJAY MANDAL LABOUR CONTRACTOR", "36ADXFS5154R1ZU", "01-04-2023", "APRIL-23", "INVOICE", "NO", "ELIGIBLE", "TELANGANA"],
-        ["36BNDPM1159D1Z9", "160", 12015.00, 0, 1081.35, 1081.35, "SRI SAI DURGA PAINTS", "36ADXFS5154R1ZU", "01-04-2023", "APRIL-23", "INVOICE", "NO", "ELIGIBLE", "TELANGANA"],
+        ["36AAGCE1603E1Z6", "EDT/SB/2223/013", 79200.00, 0, 4752.00, 4752.00, "EXIGENT DRILLING TECHNOLOGIES PRIVATE LIMITED", "36ADXFS5154R1ZU", "01-04-2023", "APRIL-23", "INVOICE", "NO", "ELIGIBLE", "TELANGANA", "B2B"],
+        ["36BDJPM4292D2ZF", "106/22-23", 211868.00, 0, 19068.12, 19068.12, "SANJAY MANDAL LABOUR CONTRACTOR", "36ADXFS5154R1ZU", "01-04-2023", "APRIL-23", "INVOICE", "NO", "ELIGIBLE", "TELANGANA", "B2B"],
+        ["36BNDPM1159D1Z9", "160", 12015.00, 0, 1081.35, 1081.35, "SRI SAI DURGA PAINTS", "36ADXFS5154R1ZU", "01-04-2023", "APRIL-23", "INVOICE", "NO", "ELIGIBLE", "TELANGANA", "B2B"],
         
         # VALUE MISMATCH EXAMPLE (Different amounts)
-        ["36AGIPG4790K1Z0", "GST-23-24/157", 4600.00, 0, 414.00, 414.00, "S K ENGINEERS", "36ADXFS5154R1ZU", "06-07-2023", "JULY-23", "INVOICE", "NO", "ELIGIBLE", "TELANGANA"],
+        ["36AGIPG4790K1Z0", "GST-23-24/157", 4600.00, 0, 414.00, 414.00, "S K ENGINEERS", "36ADXFS5154R1ZU", "06-07-2023", "JULY-23", "INVOICE", "NO", "ELIGIBLE", "TELANGANA", "B2B"],
     ]
     
     df_sample = pd.DataFrame(sample_data, columns=cols)
@@ -1063,7 +1099,7 @@ def generate_sample_books_template() -> bytes:
         worksheet.set_column('H:H', 20)
         worksheet.set_column('I:I', 14)
         worksheet.set_column('J:J', 14)
-        worksheet.set_column('K:N', 14)
+        worksheet.set_column('K:O', 14)
         
         worksheet.data_validation('K2:K1000', {'validate': 'list', 'source': ['INVOICE', 'CREDIT', 'DEBIT']})
     
@@ -1157,7 +1193,7 @@ def process_reconciliation(
             'TAXABLE VALUE': 'TAXABLE_VALUE', 'SUPPLIER NAME': 'SUPPLIER_NAME',
             'MY GSTIN': 'MY_GSTIN', 'DOCUMENT DATE': 'DOC_DATE', 'DOC_TYPE': 'DOC_TYPE',
             'REVERSE_CHARGE': 'REVERSE_CHARGE', 'ITC_CLAIM_TYPE': 'ITC_CLAIM_TYPE',
-            'PLACE_OF_SUPPLY': 'PLACE_OF_SUPPLY', 'MONTH': 'MONTH'
+            'PLACE_OF_SUPPLY': 'PLACE_OF_SUPPLY', 'MONTH': 'MONTH', 'SECTION_NAME': 'SECTION_NAME'
         }
         for old, new in col_map.items():
             if old in df_2b.columns:
@@ -1176,6 +1212,8 @@ def process_reconciliation(
         for df in [df_2b, df_pr]:
             if 'CESS' not in df.columns:
                 df['CESS'] = 0
+            if 'SECTION_NAME' not in df.columns:
+                df['SECTION_NAME'] = 'B2B'
         
         # Fill NaN and standardize data types
         for df in [df_2b, df_pr]:
@@ -1188,6 +1226,7 @@ def process_reconciliation(
             df['MONTH'] = df.get('MONTH', pd.Series(['Unknown']*len(df))).fillna('Unknown').apply(get_month_format)
             df['ITC_CLAIM_TYPE'] = df.get('ITC_CLAIM_TYPE', pd.Series(['']*len(df))).fillna('').astype(str).str.strip().str.upper()
             df['PLACE_OF_SUPPLY'] = df.get('PLACE_OF_SUPPLY', pd.Series(['']*len(df))).fillna('').astype(str).str.strip().str.upper()
+            df['SECTION_NAME'] = df.get('SECTION_NAME', pd.Series(['B2B']*len(df))).fillna('B2B').astype(str).str.strip().str.upper()
             
             # Convert numeric columns
             for col in ['TAXABLE_VALUE', 'IGST', 'CGST', 'SGST', 'CESS']:
@@ -1243,6 +1282,10 @@ def process_reconciliation(
         merged['TOTAL_TAX_PR'] = merged[tax_cols_pr].sum(axis=1, skipna=True)
         merged['TAXABLE_DIFF'] = (merged['TAXABLE_VALUE_2B'].fillna(0) - merged['TAXABLE_VALUE_PR'].fillna(0)).abs()
         merged['TAX_DIFF'] = (merged['TOTAL_TAX_2B'].fillna(0) - merged['TOTAL_TAX_PR'].fillna(0)).abs()
+        
+        # Calculate Total Document Value
+        merged['TOTAL_DOC_VALUE_2B'] = merged['TAXABLE_VALUE_2B'].fillna(0) + merged['TOTAL_TAX_2B'].fillna(0)
+        merged['TOTAL_DOC_VALUE_PR'] = merged['TAXABLE_VALUE_PR'].fillna(0) + merged['TOTAL_TAX_PR'].fillna(0)
         
         # Build matching conditions
         exact_gstin = merged['SUPPLIER_GSTIN_2B'].str.upper() == merged['SUPPLIER_GSTIN_PR'].str.upper()
@@ -1347,7 +1390,6 @@ def process_reconciliation(
     except Exception as e:
         logger.error(f"Reconciliation failed: {str(e)}", exc_info=True)
         raise
-
 
 # ==================== MAIN PROCESSING LOGIC ====================
 if file_2b and file_pr:
@@ -1689,7 +1731,8 @@ if file_2b and file_pr:
                     <strong>📋 Report Includes:</strong>
                     <ul style="margin: 10px 0 0 20px; color: var(--text-secondary); line-height: 1.8;">
                         <li>Executive Dashboard with interactive charts</li>
-                        <li>Detailed reconciliation with DOC_TYPE breakdown</li>
+                        <li>Detailed reconciliation with all 30+ columns</li>
+                        <li>Subtotals at top for each match status</li>
                         <li>Credit/Debit Note handling with negative values</li>
                         <li>Summary tables matching GST portal format</li>
                         <li>Raw data sheets for audit trail</li>
@@ -1702,50 +1745,109 @@ if file_2b and file_pr:
             with col_export2:
                 output = io.BytesIO()
                 with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                    # Prepare reconciliation sheet with all required columns
                     recon_df = merged_df[[
                         'MATCH_STATUS', 'MATCH_REASON', 'SUPPLIER_NAME_COMBINED', 
-                        'SUPPLIER_GSTIN_2B', 'SUPPLIER_GSTIN_PR', 'DOC_NUMBER_2B', 
-                        'DOC_NUMBER_PR', 'DOC_DATE_2B', 'DOC_DATE_PR', 'DOC_TYPE_2B', 
-                        'DOC_TYPE_PR', 'MONTH_2B', 'MONTH_PR', 'TAXABLE_VALUE_2B', 
-                        'TAXABLE_VALUE_PR', 'TOTAL_TAX_2B', 'TOTAL_TAX_PR', 'ITC_ELIGIBILITY'
+                        'SUPPLIER_GSTIN_2B', 'SUPPLIER_GSTIN_PR', 'MY_GSTIN_2B', 'MY_GSTIN_PR',
+                        'DOC_NUMBER_2B', 'DOC_NUMBER_PR', 'DOC_DATE_2B', 'DOC_DATE_PR',
+                        'TOTAL_DOC_VALUE_2B', 'TOTAL_DOC_VALUE_PR',
+                        'TAXABLE_VALUE_2B', 'TAXABLE_VALUE_PR',
+                        'TAXABLE_DIFF', 'TOTAL_TAX_2B', 'TOTAL_TAX_PR',
+                        'IGST_2B', 'IGST_PR', 'CGST_2B', 'CGST_PR', 'SGST_2B', 'SGST_PR',
+                        'CESS_2B', 'CESS_PR',
+                        'DOC_TYPE_2B', 'DOC_TYPE_PR',
+                        'SECTION_NAME_2B', 'SECTION_NAME_PR'
                     ]].copy()
                     
                     recon_df.columns = [
-                        'Match Status', 'Match Reason', 'Supplier Name', 
-                        'Supplier GSTIN (2B)', 'Supplier GSTIN (PR)', 'Document Number (2B)', 
-                        'Document Number (PR)', 'Document Date (2B)', 'Document Date (PR)', 
-                        'Doc Type (2B)', 'Doc Type (PR)', 'Month (2B)', 'Month (PR)', 
-                        'Taxable Value (2B)', 'Taxable Value (PR)', 'Total Tax (2B)', 
-                        'Total Tax (PR)', 'ITC Eligibility'
+                        'Match Status', 'Match Status Description', 'Supplier Name',
+                        'Supplier GSTIN (2B)', 'Supplier GSTIN (PR)', 'My GSTIN (2B)', 'My GSTIN (PR)',
+                        'Document Number (2B)', 'Document Number (PR)', 'Document Date (2B)', 'Document Date (PR)',
+                        'Total Document Value (2B)', 'Total Document Value (PR)',
+                        'Taxable Value (2B)', 'Taxable Value (PR)',
+                        'Tax Difference(2B-PR)', 'Total Tax (2B)', 'Total Tax (PR)',
+                        'IGST (2B)', 'IGST (PR)', 'CGST (2B)', 'CGST (PR)', 'SGST (2B)', 'SGST (PR)',
+                        'Cess (2B)', 'Cess (PR)',
+                        'Document Type(2B)', 'Document Type(PR)',
+                        'Section Name 2B', 'Section Name (Pr)'
                     ]
                     
+                    # Add subtotals at top if enabled
+                    if include_subtotals:
+                        # Create summary rows
+                        summary_rows = []
+                        for status in recon_df['Match Status'].unique():
+                            status_data = recon_df[recon_df['Match Status'] == status]
+                            summary_rows.append({
+                                'Match Status': f'SUBTOTAL - {status}',
+                                'Supplier Name': '',
+                                'Total Document Value (2B)': status_data['Total Document Value (2B)'].sum(),
+                                'Total Document Value (PR)': status_data['Total Document Value (PR)'].sum(),
+                                'Taxable Value (2B)': status_data['Taxable Value (2B)'].sum(),
+                                'Taxable Value (PR)': status_data['Taxable Value (PR)'].sum(),
+                                'Total Tax (2B)': status_data['Total Tax (2B)'].sum(),
+                                'Total Tax (PR)': status_data['Total Tax (PR)'].sum(),
+                            })
+                        
+                        # Convert to DataFrame and add to top
+                        summary_df = pd.DataFrame(summary_rows)
+                        recon_df = pd.concat([summary_df, recon_df], ignore_index=True)
+                    
+                    # Write to Excel starting from row 2 (for header)
                     recon_df.to_excel(writer, sheet_name='Reconciliation', index=False, startrow=2)
                     
                     workbook = writer.book
                     worksheet = writer.sheets['Reconciliation']
                     
+                    # Add header format
                     header_format = workbook.add_format({
                         'bold': True, 'bg_color': '#1e40af', 'font_color': 'white', 
-                        'border': 1, 'align': 'center', 'valign': 'vcenter'
+                        'border': 1, 'align': 'center', 'valign': 'vcenter', 'text_wrap': True
                     })
+                    
+                    # Add subtotal format
+                    subtotal_format = workbook.add_format({
+                        'bold': True, 'bg_color': '#dbeafe', 'font_color': '#1e40af',
+                        'border': 1, 'align': 'left', 'valign': 'vcenter'
+                    })
+                    
+                    # Add number format
+                    number_format = workbook.add_format({
+                        'num_format': '#,##0.00', 'border': 1
+                    })
+                    
+                    # Write headers
                     for col_num, col_name in enumerate(recon_df.columns):
                         worksheet.write(2, col_num, col_name, header_format)
+                    
+                    # Apply formatting to data rows
+                    for row_num in range(3, len(recon_df) + 3):
+                        # Check if this is a subtotal row
+                        if worksheet.read_string(row_num - 1, 0).startswith('SUBTOTAL'):
+                            worksheet.set_row(row_num - 1, None, subtotal_format)
+                        else:
+                            # Apply number formatting to value columns
+                            for col_num in [11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25]:
+                                if col_num < len(recon_df.columns):
+                                    worksheet.write_number(row_num - 1, col_num, 
+                                                         recon_df.iloc[row_num - 3, col_num], 
+                                                         number_format)
                     
                     if add_dropdown_validation:
                         worksheet.data_validation('J3:J100000', {'validate': 'list', 'source': ['INVOICE', 'CREDIT', 'DEBIT']})
                         worksheet.data_validation('K3:K100000', {'validate': 'list', 'source': ['INVOICE', 'CREDIT', 'DEBIT']})
                     
-                    worksheet.set_column('A:A', 18)
-                    worksheet.set_column('B:B', 45)
-                    worksheet.set_column('C:C', 35)
-                    worksheet.set_column('D:E', 20)
-                    worksheet.set_column('F:G', 22)
-                    worksheet.set_column('H:I', 16)
-                    worksheet.set_column('J:K', 14)
-                    worksheet.set_column('L:M', 14)
-                    worksheet.set_column('N:Q', 16)
-                    worksheet.set_column('R:R', 18)
+                    # Set column widths
+                    worksheet.set_column('A:A', 20)  # Match Status
+                    worksheet.set_column('B:B', 50)  # Match Status Description
+                    worksheet.set_column('C:C', 35)  # Supplier Name
+                    worksheet.set_column('D:G', 20)  # GSTINs
+                    worksheet.set_column('H:I', 22)  # Doc Numbers
+                    worksheet.set_column('J:K', 16)  # Doc Dates
+                    worksheet.set_column('L:Q', 18)  # Values and Tax
+                    worksheet.set_column('R:AA', 14) # Tax breakdown and Doc Types
                     
+                    # Add summary sheet
                     summary_data = pd.DataFrame({
                         'Metric': [
                             'Total Records', 'Exact Matches', 'Suggested Matches', 
@@ -1787,7 +1889,7 @@ if file_2b and file_pr:
                         key="btn_download_csv"
                     )
             
-            st.success(f"✅ Ready! Processed {total_records:,} records in {stats['processing_time_sec']}s with proper Credit/Debit Note handling.")
+            st.success(f"✅ Ready! Processed {total_records:,} records in {stats['processing_time_sec']}s with professional format export including subtotals.")
     
     except Exception as e:
         logger.error(f"Processing error: {str(e)}", exc_info=True)
@@ -1807,7 +1909,7 @@ else:
     st.markdown("""
     <div class="section-card animate-fade-in" style="text-align: center; padding: 64px 44px;">
         <div style="font-size: 4.5rem; margin-bottom: 24px;">🧾✨</div>
-        <h2 style="margin: 0 0 18px 0; font-size: 2rem;">Welcome to GST Recon Pro v5.0</h2>
+        <h2 style="margin: 0 0 18px 0; font-size: 2rem;">Welcome to GST Recon Pro v6.0</h2>
         <p style="color: var(--text-secondary); font-size: 1.15rem; max-width: 650px; margin: 0 auto 36px auto; line-height: 1.7;">
             Upload your GSTR-2B and Purchase Register files to begin intelligent reconciliation. 
             Our AI-powered engine matches invoices, handles Credit/Debit Notes with negative values, 
@@ -1835,10 +1937,10 @@ else:
 # ==================== FOOTER ====================
 st.markdown("""
 <div class="footer">
-    <div class="brand">🧾 GST Recon Pro v5.0</div>
+    <div class="brand">🧾 GST Recon Pro v6.0</div>
     <div class="credits">Enterprise GST Reconciliation Engine</div>
     <div class="credits">Developed by <strong>ABHISHEK JAKKULA</strong> • jakkulaabhishek5@gmail.com</div>
-    <div class="version">v5.0.0 • Last Updated: May 2026</div>
+    <div class="version">v6.0.0 • Last Updated: May 2026</div>
     <div style="margin-top: 24px; display: flex; justify-content: center; gap: 24px; flex-wrap: wrap;">
         <a href="#" style="color: var(--text-secondary); text-decoration: none; font-size: 0.95rem;">📚 Documentation</a>
         <a href="#" style="color: var(--text-secondary); text-decoration: none; font-size: 0.95rem;">🎥 Tutorials</a>
