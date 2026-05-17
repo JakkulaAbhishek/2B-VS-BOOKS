@@ -123,12 +123,15 @@ st.markdown('<p class="subtitle">AI-Powered reconciliation with Smart Invoice Ma
 
 # ================= SAMPLE TEMPLATES GENERATOR (Separate Files) =================
 def generate_sample_2b():
-    """Generate sample GSTR-2B Excel file with MONTH column"""
-    cols = ["SUPPLIER GSTIN*", "DOCUMENT NUMBER*", "TAXABLE VALUE*", "IGST*", "CGST*", "SGST*", "SUPPLIER NAME", "MY GSTIN", "DOCUMENT DATE", "MONTH"]
+    """Generate sample GSTR-2B Excel file with positive invoice and negative credit note"""
+    cols = ["SUPPLIER GSTIN", "DOCUMENT NUMBER", "TAXABLE VALUE", "IGST", "CGST", "SGST", "SUPPLIER NAME", "MY GSTIN", "DOCUMENT DATE", "MONTH"]
     sample_data = [
+        # Positive invoice
         ["36CNNPD6299J1ZB", "11/2023-24", 7500, 0, 675, 675, "NESHWARI ENGINEERING", "36ADXFS5154R1ZU", "24-07-2023", "2023-07"],
         ["08AAACM8473A1ZL", "MEC-439-2023", 13150, 2367, 0, 0, "METALLIZING EQUIPMENT", "36ADXFS5154R1ZU", "26-05-2023", "2023-05"],
-        ["29AABCB1234E1ZQ", "INV-101", 50000, 4500, 0, 0, "SAMPLE SUPPLIER", "36ADXFS5154R1ZU", "15-06-2023", "2023-06"]
+        # Credit note (negative values)
+        ["36AFKPD6156R1ZT", "23", -5042.36, 0, -453.81, -453.81, "SRI SATYA TECHNOLOGIES", "36ADXFS5154R1ZU", "22-02-2024", "2024-02"],
+        ["36AADCR6281N1ZT", "67186859-1D", 8579.4, 0, 772.11, 772.11, "CARE HEALTH INSURANCE", "36ADXFS5154R1ZU", "01-01-2024", "2024-01"]
     ]
     df_sample = pd.DataFrame(sample_data, columns=cols)
     output = io.BytesIO()
@@ -143,13 +146,19 @@ def generate_sample_2b():
     return output.getvalue()
 
 def generate_sample_books():
-    """Generate sample Purchase Register Excel file with MONTH column"""
-    cols = ["SUPPLIER GSTIN*", "DOCUMENT NUMBER*", "TAXABLE VALUE*", "IGST*", "CGST*", "SGST*", "SUPPLIER NAME", "MY GSTIN", "DOCUMENT DATE", "MONTH"]
+    """Generate sample Purchase Register Excel file with matching and mismatching entries"""
+    cols = ["SUPPLIER GSTIN", "DOCUMENT NUMBER", "TAXABLE VALUE", "IGST", "CGST", "SGST", "SUPPLIER NAME", "MY GSTIN", "DOCUMENT DATE", "MONTH"]
     sample_data = [
+        # Exact match with 2B invoice
         ["36CNNPD6299J1ZB", "11/2023-24", 7500, 0, 675, 675, "NESHWARI ENGINEERING", "36ADXFS5154R1ZU", "24-07-2023", "2023-07"],
-        ["08AAACM8473A1ZL", "MEC-439-2023", 13000, 2340, 0, 0, "METALLIZING EQUIPMENT CO", "36ADXFS5154R1ZU", "26-05-2023", "2023-05"],  # small mismatch
-        ["29AABCB1234E1ZQ", "INV-101", 50000, 4500, 0, 0, "SAMPLE SUPPLIER", "36ADXFS5154R1ZU", "15-06-2023", "2023-06"],
-        ["27ABCDE1234F1ZR", "INV-202", 12000, 1080, 0, 0, "EXTRA IN BOOKS", "36ADXFS5154R1ZU", "10-07-2023", "2023-07"]   # missing in 2B
+        # Slight mismatch in taxable value (within tolerance)
+        ["08AAACM8473A1ZL", "MEC-439-2023", 13000, 2340, 0, 0, "METALLIZING EQUIPMENT CO", "36ADXFS5154R1ZU", "26-05-2023", "2023-05"],
+        # Matching credit note
+        ["36AFKPD6156R1ZT", "23", -5042.36, 0, -453.81, -453.81, "SRI SATYA TECHNOLOGIES", "36ADXFS5154R1ZU", "22-02-2024", "2024-02"],
+        # Extra record missing in 2B
+        ["27ABCDE1234F1ZR", "INV-202", 12000, 1080, 0, 0, "EXTRA IN BOOKS", "36ADXFS5154R1ZU", "10-07-2023", "2023-07"],
+        # Suggested match: document date differs but within FY
+        ["36DGLPP5363P1ZG", "ST/23-24/39", 23650, 0, 2128.5, 2128.5, "S SQUARE INDUSTRIES", "36ADXFS5154R1ZU", "01-06-2023", "2023-06"]
     ]
     df_sample = pd.DataFrame(sample_data, columns=cols)
     output = io.BytesIO()
@@ -183,13 +192,20 @@ with col2_btn:
     )
 st.markdown("<br>", unsafe_allow_html=True)
 
-# ================= SMART FUZZY NORMALIZATION =================
+# ================= HELPER FUNCTIONS =================
 def normalize_invoice(series):
+    """Remove special characters and leading zeros for fuzzy matching"""
     return series.astype(str).str.upper().str.replace(r'[^A-Z0-9]', '', regex=True).str.lstrip('0')
 
-# ================= CACHED DATA PROCESSING =================
+def get_doc_type(taxable):
+    """Determine document type from taxable value sign"""
+    if taxable < 0:
+        return "CREDIT NOTE"
+    else:
+        return "INVOICE"
+
 @st.cache_data(show_spinner=False)
-def process_data_files(file_2b_bytes, file_pr_bytes):
+def process_data_files(file_2b_bytes, file_pr_bytes, tolerance):
     df_2b = pd.read_excel(io.BytesIO(file_2b_bytes))
     df_pr = pd.read_excel(io.BytesIO(file_pr_bytes))
 
@@ -206,7 +222,7 @@ def process_data_files(file_2b_bytes, file_pr_bytes):
         if "SUPPLIER GSTIN" not in df.columns:
             df["SUPPLIER GSTIN"] = ""
         if "MONTH" not in df.columns:
-            df["MONTH"] = ""   # add empty month column if missing
+            df["MONTH"] = ""
         df["SUPPLIER GSTIN"] = df["SUPPLIER GSTIN"].fillna("UNKNOWN").astype(str).str.upper().str.strip()
 
     # Numeric conversion
@@ -214,6 +230,10 @@ def process_data_files(file_2b_bytes, file_pr_bytes):
     for col in numeric_cols:
         df_2b[col] = pd.to_numeric(df_2b.get(col, 0), errors="coerce").fillna(0)
         df_pr[col] = pd.to_numeric(df_pr.get(col, 0), errors="coerce").fillna(0)
+
+    # Derive document type from sign of taxable value
+    df_2b["DOC_TYPE"] = df_2b["TAXABLE VALUE"].apply(get_doc_type)
+    df_pr["DOC_TYPE"] = df_pr["TAXABLE VALUE"].apply(get_doc_type)
 
     # Normalize document numbers
     df_2b["NORM_DOC"] = normalize_invoice(df_2b["DOCUMENT NUMBER"])
@@ -223,9 +243,9 @@ def process_data_files(file_2b_bytes, file_pr_bytes):
     df_2b["PAN"] = df_2b["SUPPLIER GSTIN"].str[2:12]
     df_pr["PAN"] = df_pr["SUPPLIER GSTIN"].str[2:12]
 
-    # Matching key = PAN + normalized document number
-    df_2b["PAN_KEY"] = df_2b["PAN"] + "|" + df_2b["NORM_DOC"]
-    df_pr["PAN_KEY"] = df_pr["PAN"] + "|" + df_pr["NORM_DOC"]
+    # Matching key = PAN + normalized doc number + document type
+    df_2b["PAN_KEY"] = df_2b["PAN"] + "|" + df_2b["NORM_DOC"] + "|" + df_2b["DOC_TYPE"]
+    df_pr["PAN_KEY"] = df_pr["PAN"] + "|" + df_pr["NORM_DOC"] + "|" + df_pr["DOC_TYPE"]
 
     dup_pr_count = df_pr.duplicated(subset=["PAN_KEY"], keep=False).sum()
 
@@ -244,57 +264,81 @@ with col2:
 if file_2b and file_pr:
     try:
         with st.spinner("🚀 Running Smart Engine & Generating Insights..."):
-            merged, dup_pr_count, df_2b, df_pr = process_data_files(file_2b.getvalue(), file_pr.getvalue())
+            merged, dup_pr_count, df_2b, df_pr = process_data_files(file_2b.getvalue(), file_pr.getvalue(), tolerance)
 
             # Calculate totals
             merged["Total Tax (2B)"] = merged[["IGST (2B)", "CGST (2B)", "SGST (2B)"]].sum(axis=1)
             merged["Total Tax (PR)"] = merged[["IGST (PR)", "CGST (PR)", "SGST (PR)"]].sum(axis=1)
             merged["TAXABLE VALUE (2B)"] = merged["TAXABLE VALUE (2B)"].fillna(0)
             merged["TAXABLE VALUE (PR)"] = merged["TAXABLE VALUE (PR)"].fillna(0)
-            merged["Tax Difference(2B-PR)"] = merged["Total Tax (2B)"] - merged["Total Tax (PR)"]
-            diff = (merged["TAXABLE VALUE (2B)"] - merged["TAXABLE VALUE (PR)"]).abs()
+            merged["Tax Diff Abs"] = (merged["TAXABLE VALUE (2B)"] - merged["TAXABLE VALUE (PR)"]).abs()
 
-            # Matching status logic
+            # Helper: same financial year? (Apr to Mar)
+            def same_fy(date_str1, date_str2):
+                try:
+                    d1 = pd.to_datetime(date_str1)
+                    d2 = pd.to_datetime(date_str2)
+                    if pd.isna(d1) or pd.isna(d2):
+                        return False
+                    fy1 = d1.year if d1.month >= 4 else d1.year - 1
+                    fy2 = d2.year if d2.month >= 4 else d2.year - 1
+                    return fy1 == fy2
+                except:
+                    return False
+
+            # Prepare conditions for match status
             exact_invoice = merged["DOCUMENT NUMBER (2B)"].astype(str).str.upper() == merged["DOCUMENT NUMBER (PR)"].astype(str).str.upper()
             exact_gstin = merged["SUPPLIER GSTIN (2B)"].astype(str).str.upper() == merged["SUPPLIER GSTIN (PR)"].astype(str).str.upper()
+            tax_diff_within_tol = merged["Tax Diff Abs"] <= tolerance
+            tax_diff_zero = merged["Tax Diff Abs"] == 0
+            # Suggested: same PAN, doc number matches (normalized), values within tolerance, but document dates differ within FY
+            norm_doc_equal = merged["NORM_DOC (2B)"] == merged["NORM_DOC (PR)"]
+            same_pan = merged["PAN (2B)"] == merged["PAN (PR)"]
+            dates_differ = merged["DOCUMENT DATE (2B)"] != merged["DOCUMENT DATE (PR)"]
+            within_fy = merged.apply(lambda r: same_fy(r["DOCUMENT DATE (2B)"], r["DOCUMENT DATE (PR)"]), axis=1)
 
             conditions = [
-                (merged["_merge"] == "both") & exact_gstin & exact_invoice & (diff == 0),
-                (merged["_merge"] == "both") & exact_gstin & ~exact_invoice & (diff == 0),
-                (merged["_merge"] == "both") & ~exact_gstin,
-                (merged["_merge"] == "both") & exact_gstin & (diff <= tolerance),
-                (merged["_merge"] == "both") & exact_gstin & (diff > tolerance),
+                # Exact match
+                (merged["_merge"] == "both") & exact_gstin & exact_invoice & tax_diff_zero,
+                # Suggested match
+                (merged["_merge"] == "both") & same_pan & norm_doc_equal & tax_diff_within_tol & dates_differ & within_fy,
+                # Value mismatch (doc & GSTIN match but taxable diff > tolerance)
+                (merged["_merge"] == "both") & exact_gstin & exact_invoice & (~tax_diff_within_tol),
+                # Cross-state PAN match
+                (merged["_merge"] == "both") & same_pan & (~exact_gstin) & tax_diff_within_tol,
+                # Missing in PR
                 (merged["_merge"] == "left_only"),
+                # Missing in 2B
                 (merged["_merge"] == "right_only")
             ]
-            statuses = ["Exact", "Fuzzy Match", "Cross-State (PAN Match)", "Exact (Tolerance)", "Value Mismatch", "Missing in PR", "Missing in 2B"]
+            statuses = ["Exact", "Suggested", "Value Mismatch", "Cross-State (PAN Match)", "Missing in PR", "Missing in 2B"]
             reasons = [
                 "Exact match on all fields",
-                "Matched ignoring special chars",
+                "Document date differs within FY, values within tolerance",
+                "Document number & GSTIN match, but taxable value mismatch",
                 "Matched on PAN, but State GSTIN differs",
-                f"Matched within ₹{tolerance} tolerance",
-                "Taxable value mismatch",
                 "Present only in GSTR-2B",
                 "Present only in Books"
             ]
-            merged["Match Status"] = np.select(conditions, statuses, default="Unknown")
+            merged["Match Status"] = np.select(conditions, statuses, default="Other")
             merged["Match Reason"] = np.select(conditions, reasons, default="Unknown")
 
-            # Combine supplier name from either side
+            # Combine supplier name
             supplier_2b = merged.get("SUPPLIER NAME (2B)", pd.Series(dtype='object'))
             supplier_pr = merged.get("SUPPLIER NAME (PR)", pd.Series(dtype='object'))
             merged["Supplier Name"] = supplier_2b.combine_first(supplier_pr).fillna("Unknown")
 
-            # Build reconciliation DataFrame including month columns
+            # Build reconciliation DataFrame
             recon_df = merged[[
                 "Match Status", "Match Reason", "Supplier Name",
                 "SUPPLIER GSTIN (2B)", "SUPPLIER GSTIN (PR)",
                 "MY GSTIN (2B)", "MY GSTIN (PR)",
                 "DOCUMENT NUMBER (2B)", "DOCUMENT NUMBER (PR)",
                 "DOCUMENT DATE (2B)", "DOCUMENT DATE (PR)",
-                "MONTH (2B)", "MONTH (PR)",          # month columns added
+                "MONTH (2B)", "MONTH (PR)",
+                "DOC_TYPE (2B)", "DOC_TYPE (PR)",
                 "TAXABLE VALUE (2B)", "TAXABLE VALUE (PR)",
-                "Tax Difference(2B-PR)",
+                "Tax Diff Abs",
                 "Total Tax (2B)", "Total Tax (PR)",
                 "IGST (2B)", "IGST (PR)",
                 "CGST (2B)", "CGST (PR)",
@@ -308,15 +352,16 @@ if file_2b and file_pr:
                 "Document Number (2B)", "Document Number (PR)",
                 "Document Date (2B)", "Document Date (PR)",
                 "Month (2B)", "Month (PR)",
+                "Doc Type (2B)", "Doc Type (PR)",
                 "Taxable Value (2B)", "Taxable Value (PR)",
-                "Tax Difference(2B-PR)",
+                "Tax Difference Abs",
                 "Total Tax (2B)", "Total Tax (PR)",
                 "IGST (2B)", "IGST (PR)",
                 "CGST (2B)", "CGST (PR)",
                 "SGST (2B)", "SGST (PR)"
             ]
 
-            # Fill missing month with "Unknown"
+            # Fill missing month
             recon_df["Month (2B)"] = recon_df["Month (2B)"].fillna("Unknown")
             recon_df["Month (PR)"] = recon_df["Month (PR)"].fillna("Unknown")
 
@@ -329,7 +374,8 @@ if file_2b and file_pr:
             st.markdown("### 📊 Live Summary")
             m1, m2, m3, m4 = st.columns(4)
             m1.metric("Total Records", len(recon_df))
-            m2.metric("Total Matches", counts.get("Exact", 0) + counts.get("Fuzzy Match", 0) + counts.get("Exact (Tolerance)", 0) + counts.get("Cross-State (PAN Match)", 0))
+            total_matches = counts.get("Exact", 0) + counts.get("Suggested", 0) + counts.get("Cross-State (PAN Match)", 0)
+            m2.metric("Total Matches", total_matches)
             m3.metric("Missing in Books", counts.get("Missing in PR", 0))
             m4.metric("Missing in 2B", counts.get("Missing in 2B", 0))
 
@@ -339,6 +385,7 @@ if file_2b and file_pr:
             miss_pr_pct = (counts.get("Missing in PR", 0) / total_records) * 100 if total_records else 0
             missed_itc = recon_df[recon_df["Match Status"] == "Missing in PR"]["Total Tax (2B)"].sum()
             risk_itc = recon_df[recon_df["Match Status"] == "Missing in 2B"]["Total Tax (PR)"].sum()
+            suggested_count = counts.get("Suggested", 0)
 
             insights = []
             if dup_pr_count > 0:
@@ -351,15 +398,16 @@ if file_2b and file_pr:
                 insights.append(f"💡 **Cash Flow Opportunity:** Unclaimed ITC of **₹{missed_itc:,.2f}** in GSTR-2B.")
             if risk_itc > 0:
                 insights.append(f"⚠️ **Compliance Risk:** **₹{risk_itc:,.2f}** tax claimed in books but missing in GSTR-2B.")
+            if suggested_count > 0:
+                insights.append(f"🕒 **Suggested Matches:** **{suggested_count}** records have date mismatches but are within financial year – verify if acceptable.")
             if not insights:
                 insights.append("✅ **Excellent Health:** Books perfectly reconciled with GSTR-2B.")
             for insight in insights:
                 st.markdown(f"<div class='insight-box'>{insight}</div>", unsafe_allow_html=True)
 
-            # ========== MONTH-WISE CHARTS (if month data is present) ==========
+            # ========== MONTH-WISE CHARTS ==========
             if (recon_df["Month (2B)"] != "Unknown").any() or (recon_df["Month (PR)"] != "Unknown").any():
                 st.markdown("### 📅 Month-wise Analysis")
-                # Summarise month-wise totals from both sides
                 month_summary = recon_df.groupby("Month (2B)").agg({
                     "Taxable Value (2B)": "sum",
                     "Total Tax (2B)": "sum"
@@ -378,9 +426,8 @@ if file_2b and file_pr:
             chart_data = counts.reset_index()
             chart_data.columns = ["Match Status", "Count"]
             color_map = {
-                "Exact": "#10b981", "Fuzzy Match": "#38bdf8", "Cross-State (PAN Match)": "#06b6d4",
-                "Exact (Tolerance)": "#f59e0b", "Value Mismatch": "#ef4444",
-                "Missing in PR": "#f97316", "Missing in 2B": "#8b5cf6"
+                "Exact": "#10b981", "Suggested": "#06b6d4", "Cross-State (PAN Match)": "#38bdf8",
+                "Value Mismatch": "#ef4444", "Missing in PR": "#f97316", "Missing in 2B": "#8b5cf6", "Other": "#64748b"
             }
             fig = px.bar(chart_data, x="Count", y="Match Status", color="Match Status",
                          color_discrete_map=color_map, text="Count", orientation='h',
@@ -406,7 +453,7 @@ if file_2b and file_pr:
 
             # ========== FILTER & PREVIEW ==========
             st.markdown("#### 🔎 Filter & Preview Data")
-            selected_status = st.multiselect("Filter by Match Status:", options=statuses, default=statuses)
+            selected_status = st.multiselect("Filter by Match Status:", options=statuses + ["Other"], default=statuses)
             filtered_df = recon_df[recon_df["Match Status"].isin(selected_status)]
             st.dataframe(filtered_df.head(100), use_container_width=True)
 
@@ -426,7 +473,7 @@ if file_2b and file_pr:
                 dash.merge_range("A1:U2", "GST RECON PRO - EXECUTIVE SUMMARY", workbook.add_format({"bold": True, "font_size": 18, "bg_color": "#0f172a", "font_color": "#38bdf8", "align": "center"}))
                 dash.merge_range("A3:U3", "Developed by ABHISHEK JAKKULA | jakkulaabhishek5@gmail.com", workbook.add_format({"italic": True, "font_size": 10, "bg_color": "#0f172a", "font_color": "#94a3b8", "align": "center"}))
 
-                # Summary table with month columns included later if needed? We'll keep existing structure but add month columns to Recon sheet.
+                # Summary table
                 dash.write_row("B5", [
                     "Match Status", "Record Count",
                     "Taxable Impact (2B)", "IGST Impact (2B)", "CGST Impact (2B)",
@@ -435,16 +482,16 @@ if file_2b and file_pr:
                 dash.set_column('B:B', 25)
                 dash.set_column('C:I', 18)
 
-                for i, status in enumerate(statuses):
+                for i, status in enumerate(statuses + ["Other"]):
                     row = 5 + i
                     dash.write(row, 1, status)
                     dash.write_formula(row, 2, f'=COUNTIF(Reconciliation!$A$3:$A${max_rows}, "{status}")')
-                    dash.write_formula(row, 3, f'=SUMIF(Reconciliation!$A$3:$A${max_rows}, "{status}", Reconciliation!$N$3:$N${max_rows})')   # Taxable Value (2B)
-                    dash.write_formula(row, 4, f'=SUMIF(Reconciliation!$A$3:$A${max_rows}, "{status}", Reconciliation!$R$3:$R${max_rows})')   # IGST (2B)
-                    dash.write_formula(row, 5, f'=SUMIF(Reconciliation!$A$3:$A${max_rows}, "{status}", Reconciliation!$T$3:$T${max_rows})')   # CGST (2B)
-                    dash.write_formula(row, 6, f'=SUMIF(Reconciliation!$A$3:$A${max_rows}, "{status}", Reconciliation!$O$3:$O${max_rows})')   # Taxable Value (PR)
-                    dash.write_formula(row, 7, f'=SUMIF(Reconciliation!$A$3:$A${max_rows}, "{status}", Reconciliation!$S$3:$S${max_rows})')   # IGST (PR)
-                    dash.write_formula(row, 8, f'=SUMIF(Reconciliation!$A$3:$A${max_rows}, "{status}", Reconciliation!$U$3:$U${max_rows})')   # CGST (PR)
+                    dash.write_formula(row, 3, f'=SUMIF(Reconciliation!$A$3:$A${max_rows}, "{status}", Reconciliation!$P$3:$P${max_rows})')   # Taxable Value (2B)
+                    dash.write_formula(row, 4, f'=SUMIF(Reconciliation!$A$3:$A${max_rows}, "{status}", Reconciliation!$U$3:$U${max_rows})')   # IGST (2B)
+                    dash.write_formula(row, 5, f'=SUMIF(Reconciliation!$A$3:$A${max_rows}, "{status}", Reconciliation!$W$3:$W${max_rows})')   # CGST (2B)
+                    dash.write_formula(row, 6, f'=SUMIF(Reconciliation!$A$3:$A${max_rows}, "{status}", Reconciliation!$Q$3:$Q${max_rows})')   # Taxable Value (PR)
+                    dash.write_formula(row, 7, f'=SUMIF(Reconciliation!$A$3:$A${max_rows}, "{status}", Reconciliation!$V$3:$V${max_rows})')   # IGST (PR)
+                    dash.write_formula(row, 8, f'=SUMIF(Reconciliation!$A$3:$A${max_rows}, "{status}", Reconciliation!$X$3:$X${max_rows})')   # CGST (PR)
 
                 # Top 10 tables
                 dash.write("K5", "Top 10 Suppliers (2B)", fmt_dark_blue_white)
@@ -480,7 +527,7 @@ if file_2b and file_pr:
                 bar_pr.set_title({'name': 'Top 10 Suppliers (Books)'})
                 dash.insert_chart('Q18', bar_pr, {'x_scale': 1.2, 'y_scale': 1.2})
 
-                # --- Reconciliation Sheet (includes Month columns) ---
+                # --- Reconciliation Sheet ---
                 sheet_recon = workbook.add_worksheet("Reconciliation")
                 recon_df.to_excel(writer, sheet_name="Reconciliation", startrow=2, index=False, header=False)
                 for col_num, col_name in enumerate(recon_df.columns):
@@ -490,13 +537,13 @@ if file_2b and file_pr:
                         sheet_recon.write_formula(0, col_num, f"=SUBTOTAL(9,{col_letter}3:{col_letter}{max_rows})", fmt_subtotal)
                 sheet_recon.set_column('A:B', 22)
                 sheet_recon.set_column('C:C', 35)
-                sheet_recon.set_column('D:M', 18)   # widened for month columns
-                sheet_recon.set_column('N:W', 14)
+                sheet_recon.set_column('D:M', 18)
+                sheet_recon.set_column('N:Y', 14)
                 sheet_recon.autofilter(1, 0, max_rows, len(recon_df.columns) - 1)
 
                 # --- Raw Data Sheets ---
-                df_2b.drop(columns=["NORM_DOC", "PAN", "PAN_KEY"], errors="ignore").to_excel(writer, sheet_name="2B Raw", index=False)
-                df_pr.drop(columns=["NORM_DOC", "PAN", "PAN_KEY"], errors="ignore").to_excel(writer, sheet_name="Books Raw", index=False)
+                df_2b.drop(columns=["NORM_DOC", "PAN", "PAN_KEY", "DOC_TYPE"], errors="ignore").to_excel(writer, sheet_name="2B Raw", index=False)
+                df_pr.drop(columns=["NORM_DOC", "PAN", "PAN_KEY", "DOC_TYPE"], errors="ignore").to_excel(writer, sheet_name="Books Raw", index=False)
 
             st.success("✅ Ultimate Reconciliation Dashboard generated successfully!")
 
