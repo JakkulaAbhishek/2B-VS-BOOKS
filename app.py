@@ -64,7 +64,7 @@ def generate_sample_2b():
         summary_df.to_excel(writer, sheet_name='Overall Summary', index=False)
 
         # ---------- Sheet: Document Details (Inv CDN) ----------
-        # Columns exactly as in your sample (first few rows shown)
+        # Columns exactly as in your sample (all 70+ columns)
         detail_cols = [
             'Action Errors', 'Match Status', 'Match Status Description', 'Supplier Name',
             'Supplier GSTIN (2B)', 'Supplier GSTIN (PR)', 'My GSTIN (2B)', 'My GSTIN (PR)',
@@ -86,30 +86,101 @@ def generate_sample_2b():
             'Vendor Code', 'Financial Year', 'Voucher Number', 'Out of Range (2B)', 'Out of Range (PR)',
             'Claimable ITC - CGST', 'Claimable ITC - SGST', 'Claimable ITC - IGST', 'Claimable ITC - Cess'
         ]
-        # Create a few sample rows (matching your exact sample data)
-        sample_rows = [
-            ['action_errors', 'Missing in PR', '', 'M/S SRI SATYA TECHNOLOGIES', '36AFKPD6156R1ZT', '', '36ADXFS5154R1ZU', '',
-             '23', '', '22-02-2024', '', -5950, 0, -5042.36, 0, -907.62, -907.62, 0, 0, 0, -453.81, 0, -453.81, 0, 0, 0,
-             'CREDIT', '', 'CDN', '', '02-2024', '', 'NO', '', 'TELANGANA', '', '', '', '', 'YES', '', '', 0, 0, 0, 0,
-             'FILED', 'N', '', 'No Action', '', 0, '11-03-2024', '022024', '', '', '', '', '', 'ed58f5e...', '22-02-2024',
-             '', '', '', '', '', '', '', '', '2023-24', '', False, False, 0, 0, 0, 0],
-            ['action_errors', 'Exact', 'All parameters matching except rounding off', 'NESHWARI ENGINEERING AND SERVICES',
-             '36CNNPD6299J1ZB', '36CNNPD6299J1ZB', '36ADXFS5154R1ZU', '36ADXFS5154R1ZU',
-             '11/2023-24', '11/2023-24', '24-07-2023', '24-07-2023', 8850, 8850, 7500, 7500, 0, 1350, 1350,
-             0, 0, 675, 675, 675, 675, 0, 0, 'INVOICE', 'INVOICE', 'B2B', 'B2B', '07-2023', '07-2023',
-             'NO', 'NO', 'TELANGANA', 'TELANGANA', '', '', '', 'YES', 'ELIGIBLE', '', 0, 675, 675, 0,
-             'FILED', 'N', '', 'Claim ITC', '03-2024', 1350, '11-08-2023', '072023', '', '', '', '', '', '',
-             '', '', '', '', '', '', '', '2023-24', '', False, False, 675, 675, 0, 0],
-        ]
-        detail_df = pd.DataFrame(sample_rows, columns=detail_cols)
+        
+        # Create sample rows as dictionaries (ensuring all columns have a value)
+        row1 = {col: '' for col in detail_cols}
+        row1.update({
+            'Action Errors': 'action_errors',
+            'Match Status': 'Missing in PR',
+            'Supplier Name': 'M/S SRI SATYA TECHNOLOGIES',
+            'Supplier GSTIN (2B)': '36AFKPD6156R1ZT',
+            'My GSTIN (2B)': '36ADXFS5154R1ZU',
+            'Document Number (2B)': '23',
+            'Document Date (2B)': '22-02-2024',
+            'Total Document Value (2B)': -5950,
+            'Taxable Value (2B)': -5042.36,
+            'Tax Difference(2B-PR)': -907.62,
+            'Total Tax (2B)': -907.62,
+            'CGST (2B)': -453.81,
+            'SGST (2B)': -453.81,
+            'Document Type(2B)': 'CREDIT',
+            'Section Name 2B': 'CDN',
+            'Return Period (2B)': '02-2024',
+            'Reverse Charge (2B)': 'NO',
+            'Place of Supply (2B)': 'TELANGANA',
+            'ITC Availablity(2B)': 'YES',
+            'GSTR1 Filing Status': 'FILED',
+            'GSTR3B Filing Status': 'N',
+            'ITC Claim Status': 'No Action',
+            'GSTR-1/IFF/5 Filing Date': '11-03-2024',
+            'GSTR-1/IFF/5 Filing Period': '022024',
+            'IRN': 'ed58f5e1d6b8dd60930083928a0b9396739e93be5aacf87bb2c73bd125a28c84',
+            'IRN generation date': '22-02-2024',
+            'Financial Year': '2023-24',
+            'Out of Range (2B)': False,
+            'Out of Range (PR)': False
+        })
+        
+        row2 = {col: '' for col in detail_cols}
+        row2.update({
+            'Action Errors': 'action_errors',
+            'Match Status': 'Exact',
+            'Match Status Description': 'All parameters matching except rounding off',
+            'Supplier Name': 'NESHWARI ENGINEERING AND SERVICES',
+            'Supplier GSTIN (2B)': '36CNNPD6299J1ZB',
+            'Supplier GSTIN (PR)': '36CNNPD6299J1ZB',
+            'My GSTIN (2B)': '36ADXFS5154R1ZU',
+            'My GSTIN (PR)': '36ADXFS5154R1ZU',
+            'Document Number (2B)': '11/2023-24',
+            'Document Number (PR)': '11/2023-24',
+            'Document Date (2B)': '24-07-2023',
+            'Document Date (PR)': '24-07-2023',
+            'Total Document Value (2B)': 8850,
+            'Total Document Value (PR)': 8850,
+            'Taxable Value (2B)': 7500,
+            'Taxable Value (PR)': 7500,
+            'Total Tax (2B)': 1350,
+            'Total Tax (PR)': 1350,
+            'CGST (2B)': 675,
+            'CGST (PR)': 675,
+            'SGST (2B)': 675,
+            'SGST (PR)': 675,
+            'Document Type(2B)': 'INVOICE',
+            'Document Type(PR)': 'INVOICE',
+            'Section Name 2B': 'B2B',
+            'Section Name (Pr)': 'B2B',
+            'Return Period (2B)': '07-2023',
+            'Return Period (PR)': '07-2023',
+            'Reverse Charge (2B)': 'NO',
+            'Reverse Charge (PR)': 'NO',
+            'Place of Supply (2B)': 'TELANGANA',
+            'Place of Supply (PR)': 'TELANGANA',
+            'ITC Availablity(2B)': 'YES',
+            'ITC Claim Eligibility(PR)': 'ELIGIBLE',
+            'CGST Claimed Amount': 675,
+            'SGST Claimed Amount': 675,
+            'GSTR1 Filing Status': 'FILED',
+            'GSTR3B Filing Status': 'N',
+            'ITC Claim Status': 'Claim ITC',
+            'ITC Claim Month as per 3B': '03-2024',
+            'ITC Claim Amount': 1350,
+            'GSTR-1/IFF/5 Filing Date': '11-08-2023',
+            'GSTR-1/IFF/5 Filing Period': '072023',
+            'Financial Year': '2023-24',
+            'Claimable ITC - CGST': 675,
+            'Claimable ITC - SGST': 675
+        })
+        
+        sample_rows = [row1, row2]
+        detail_df = pd.DataFrame(sample_rows)
         detail_df.to_excel(writer, sheet_name='Document Details (Inv CDN)', index=False)
 
         # Formatting
         workbook = writer.book
         header_fmt = workbook.add_format({'bold': True, 'bg_color': '#1e3a8a', 'font_color': 'white'})
-        for sheetname in writer.sheets:
+        for sheetname, df in [('Overall Summary', summary_df), ('Document Details (Inv CDN)', detail_df)]:
             worksheet = writer.sheets[sheetname]
-            for col_num, col_name in enumerate(detail_df.columns if sheetname == 'Document Details (Inv CDN)' else summary_df.columns):
+            for col_num, col_name in enumerate(df.columns):
                 worksheet.write(0, col_num, col_name, header_fmt)
             worksheet.set_column('A:ZZ', 16)
     return output.getvalue()
@@ -158,53 +229,35 @@ def generate_sample_books():
         cdn_df = pd.DataFrame(cdn_data, columns=cdn_cols)
         cdn_df.to_excel(writer, sheet_name='Purchase Credit Debit Note', index=False)
 
-        # ---------- Summary (with formula placeholders - we put the formulas as strings) ----------
-        summary_data = {
-            'A': ['', '', '', '', 'Invoice Summary', '', '', '', '', '', 'CDN Summary', '', '', '', ''],
-            'B': ['', '', '', '', '', 'Transaction Type', '# Rows', 'Total taxable Value', 'IGST Amount', 'CGST Amount', 'SGST Amount', 'Total GST Amount', 'Total Transaction value', '', 'Note Type', 'Transaction Type', '# Rows', 'Total taxable Value', 'IGST Amount', 'CGST Amount', 'SGST Amount', 'Total GST Amount', 'Total Transaction value'],
-            # We'll just put dummy zeros for simplicity, but the structure is preserved
-        }
-        # Actually let's create a proper DataFrame with the exact layout from your sample
-        summary_df = pd.DataFrame({
-            'Unnamed: 0': ['', '', '', '', '', 'B2B', 'B2C', 'Total', '', '', 'Credit', 'Credit', 'Debit', 'Debit', 'Total'],
-            'Unnamed: 1': ['', '', '', '', 'Transaction Type', 'B2B', 'B2C', 'Total', '', 'Note Type', 'B2B', 'B2C', 'B2B', 'B2C', 'Total'],
-            '# Rows': ['', '', '', '', '', '=SUMPRODUCT(1*COUNTIFS(...))', '=SUMPRODUCT(...)', '=SUM(D5:D6)', '', '', '=SUMPRODUCT(...)', '=SUMPRODUCT(...)', '=SUMPRODUCT(...)', '=SUMPRODUCT(...)', '=SUM(D12:D15)'],
-            'Total taxable Value': ['', '', '', '', '', '=SUMIFS(...)', '=SUMIFS(...)', '=SUM(E5:E6)', '', '', '=SUMIFS(...)', '=SUMIFS(...)', '=SUMIFS(...)', '=SUMIFS(...)', '=SUM(E12:E15)'],
-            # ... rest of columns can be truncated for brevity, but we include the header row
-        })
-        # For simplicity, just write a placeholder sheet with the right columns
-        summary_placeholder = pd.DataFrame([['']*10], columns=['A','B','C','D','E','F','G','H','I','J'])
-        summary_placeholder.to_excel(writer, sheet_name='Summary', index=False)
-        # But better: copy the exact structure from your sample as a static template
-        # I'll write a simplified version that keeps the column headers:
+        # ---------- Summary (placeholder with correct column headers) ----------
         summary_cols = ['A','B','C','D','E','F','G','H','I','J']
         summary_data_rows = [
             ['','','','','','','','','',''],
             ['','','','','','','','','',''],
             ['','Invoice Summary','','','','','','','',''],
             ['','','Transaction Type','# Rows','Total taxable Value','IGST Amount','CGST Amount','SGST Amount','Total GST Amount','Total Transaction value'],
-            ['','','B2B','','','','','','',''],
-            ['','','B2C','','','','','','',''],
-            ['','','Total','','','','','','',''],
+            ['','','B2B','=SUMPRODUCT(1*COUNTIFS(...))','=SUMIFS(...)','=SUMIFS(...)','=SUMIFS(...)','=SUMIFS(...)','=SUM(F5:G5)+...','=I5+E5'],
+            ['','','B2C','=SUMPRODUCT(...)','=SUMIFS(...)','=SUMIFS(...)','=SUMIFS(...)','=SUMIFS(...)','=SUM(F6:G6)+...','=I6+E6'],
+            ['','','Total','=SUM(D5:D6)','=SUM(E5:E6)','=SUM(F5:F6)','=SUM(G5:G6)','=SUM(H5:H6)','=SUM(I5:I6)','=SUM(J5:J6)'],
             ['','','','','','','','','',''],
             ['','CDN Summary','','','','','','','',''],
             ['','Note Type','Transaction Type','# Rows','Total taxable Value','IGST Amount','CGST Amount','SGST Amount','Total GST Amount','Total Transaction value'],
-            ['','Credit','B2B','','','','','','',''],
-            ['','Credit','B2C','','','','','','',''],
-            ['','Debit','B2B','','','','','','',''],
-            ['','Debit','B2C','','','','','','',''],
-            ['','Total','','','','','','','',''],
+            ['','Credit','B2B','=SUMPRODUCT(...)','=SUMIFS(...)','=SUMIFS(...)','=SUMIFS(...)','=SUMIFS(...)','=SUM(F11:H11)+...','=I11+E11'],
+            ['','Credit','B2C','=SUMPRODUCT(...)','=SUMIFS(...)','=SUMIFS(...)','=SUMIFS(...)','=SUMIFS(...)','=SUM(F12:H12)+...','=I12+E12'],
+            ['','Debit','B2B','=SUMPRODUCT(...)','=SUMIFS(...)','=SUMIFS(...)','=SUMIFS(...)','=SUMIFS(...)','=SUM(F13:H13)+...','=I13+E13'],
+            ['','Debit','B2C','=SUMPRODUCT(...)','=SUMIFS(...)','=SUMIFS(...)','=SUMIFS(...)','=SUMIFS(...)','=SUM(F14:H14)+...','=I14+E14'],
+            ['','Total','','=SUM(D11:D14)','=SUM(E11:E14)','=SUM(F11:F14)','=SUM(G11:G14)','=SUM(H11:H14)','=SUM(I11:I14)','=SUM(J11:J14)'],
         ]
         summary_df = pd.DataFrame(summary_data_rows, columns=summary_cols)
         summary_df.to_excel(writer, sheet_name='Summary', index=False, header=False)
 
-        # ---------- State Code Definition (copy from your sample) ----------
+        # ---------- State Code Definition ----------
         state_data = {
-            'State': ['Andaman and Nicobar Islands', 'Andhra Pradesh', 'Telangana'],
-            'State Name': ['Andaman and Nicobar Islands', 'Andhra Pradesh', 'Telangana'],
-            '2 digit code': [35, 37, 36],
-            'ISO Code': ['IN-AN', 'IN-AP', 'IN-TG'],
-            # ... we can just put a few rows for demonstration
+            'State': ['Telangana', 'Andhra Pradesh', 'Maharashtra'],
+            'State Name': ['Telangana', 'Andhra Pradesh', 'Maharashtra'],
+            '2 digit code': [36, 37, 27],
+            'ISO Code': ['IN-TG', 'IN-AP', 'IN-MH'],
+            'State Code': ['TG', 'AP', 'MH']
         }
         state_df = pd.DataFrame(state_data)
         state_df.to_excel(writer, sheet_name='State Code Definition', index=False)
@@ -245,7 +298,7 @@ st.markdown("---")
 def load_2b_data(file_bytes):
     """Reads the uploaded GSTR‑2B file (which should follow the structure of your 'Document Details (Inv CDN)' sheet)."""
     df = pd.read_excel(io.BytesIO(file_bytes), sheet_name='Document Details (Inv CDN)')
-    # Map required columns (the file already has columns like 'Supplier GSTIN (2B)', 'Document Number (2B)', etc.)
+    # Map required columns
     rename_map = {
         'Supplier GSTIN (2B)': 'SUPPLIER GSTIN',
         'Document Number (2B)': 'DOCUMENT NUMBER',
@@ -313,19 +366,16 @@ def load_pr_data(file_bytes):
     }
     if not credit_debit.empty:
         credit_debit = credit_debit.rename(columns={k: v for k, v in cdn_rename.items() if k in credit_debit.columns})
-        # Set DOC_TYPE: Credit Note (C) -> negative taxable value, Debit Note (D) -> positive
         if 'NOTE_TYPE' in credit_debit.columns:
             credit_debit['DOC_TYPE'] = credit_debit['NOTE_TYPE'].apply(lambda x: 'CREDIT NOTE' if x == 'C' else 'DEBIT NOTE')
         else:
             credit_debit['DOC_TYPE'] = 'CREDIT NOTE'
-        # Ensure taxable value is negative for credit notes
         credit_debit['TAXABLE VALUE'] = credit_debit['TAXABLE VALUE'].astype(float)
         credit_debit.loc[credit_debit['DOC_TYPE'] == 'CREDIT NOTE', 'TAXABLE VALUE'] = -abs(credit_debit['TAXABLE VALUE'])
     else:
         credit_debit = pd.DataFrame(columns=invoices.columns)
     
     pr_df = pd.concat([invoices, credit_debit], ignore_index=True, sort=False)
-    # Fill missing columns
     for col in ['IGST', 'CGST', 'SGST', 'TAXABLE VALUE']:
         if col not in pr_df.columns:
             pr_df[col] = 0
@@ -338,17 +388,14 @@ def run_reconciliation(file_2b, file_pr, tolerance):
     df_2b = load_2b_data(file_2b)
     df_pr = load_pr_data(file_pr)
     
-    # Full outer merge on MATCH_KEY
     merged = pd.merge(df_2b, df_pr, on='MATCH_KEY', how='outer', suffixes=(' (2B)', ' (PR)'), indicator=True)
     merged['Taxable Diff'] = merged['TAXABLE VALUE (2B)'].fillna(0) - merged['TAXABLE VALUE (PR)'].fillna(0)
     merged['Tax Diff'] = merged['TOTAL_TAX (2B)'].fillna(0) - merged['TOTAL_TAX (PR)'].fillna(0)
     merged['Taxable Diff Abs'] = merged['Taxable Diff'].abs()
     merged['Tax Diff Abs'] = merged['Tax Diff'].abs()
     
-    # Determine match status (same logic as your original file)
     both = merged['_merge'] == 'both'
     amounts_ok = (merged['Taxable Diff Abs'] <= tolerance) & (merged['Tax Diff Abs'] <= tolerance)
-    # For Exact, we also check that document numbers match (they do because of MATCH_KEY) and dates? We'll keep it simple
     exact = both & amounts_ok
     mismatch = both & (~amounts_ok)
     missing_pr = merged['_merge'] == 'left_only'
@@ -366,7 +413,6 @@ def run_reconciliation(file_2b, file_pr, tolerance):
         'Missing in 2B': 'Present only in Purchase Register'
     }).fillna('')
     
-    # Build final detail DataFrame (similar to your Document Details sheet)
     detail_cols = [
         'Match Status', 'Match Status Description', 'SUPPLIER NAME (2B)',
         'SUPPLIER GSTIN (2B)', 'SUPPLIER GSTIN (PR)',
@@ -407,7 +453,6 @@ if file_2b and file_pr:
         with st.spinner("Reconciling..."):
             detail_df, raw_2b, raw_pr = run_reconciliation(file_2b.getvalue(), file_pr.getvalue(), tolerance)
             
-            # Summary stats (like your Overall Summary)
             status_counts = detail_df['Match Status'].value_counts()
             total_2b = detail_df['Taxable Value (2B)'].sum()
             total_pr = detail_df['Taxable Value (PR)'].sum()
@@ -433,7 +478,6 @@ if file_2b and file_pr:
             st.markdown("#### Document Details")
             st.dataframe(detail_df.head(100), use_container_width=True)
             
-            # Download Excel report
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
                 summary_df.to_excel(writer, sheet_name='Overall Summary', index=False)
