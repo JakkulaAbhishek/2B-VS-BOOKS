@@ -3,22 +3,9 @@
 # ============================================================================
 # Author: Abhishek Jakkula
 # Email: jakkulaabhishek5@gmail.com
-# Version: 6.0.0 (Professional Format with Subtotals)
+# Version: 6.0.1 (Fixed Worksheet Error)
 # Last Updated: May 2026
 # License: Proprietary - Enterprise Edition
-# ============================================================================
-# 
-# KEY FEATURES IN v6.0:
-# ✅ Professional reconciliation sheet matching uploaded format
-# ✅ All 30+ columns as per your requirements
-# ✅ Subtotals at top of reconciliation sheet
-# ✅ Enhanced Excel formatting with color coding
-# ✅ Summary dashboard with key metrics
-# ✅ Advanced filtering and search capabilities
-# ✅ Multi-sheet export with proper formatting
-# ✅ Automated data validation
-# ✅ Comprehensive audit trail
-# ✅ Performance optimized for large datasets
 # ============================================================================
 
 # ==================== IMPORTS ====================
@@ -1820,18 +1807,28 @@ if file_2b and file_pr:
                     for col_num, col_name in enumerate(recon_df.columns):
                         worksheet.write(2, col_num, col_name, header_format)
                     
+                    # ✅ FIXED: Track which rows are subtotals BEFORE writing
+                    # Create a list to track subtotal rows
+                    subtotal_row_indices = []
+                    for idx, row in recon_df.iterrows():
+                        if str(row['Match Status']).startswith('SUBTOTAL'):
+                            subtotal_row_indices.append(idx + 3)  # +3 because data starts at row 3 (0-indexed: row 2)
+                    
                     # Apply formatting to data rows
                     for row_num in range(3, len(recon_df) + 3):
-                        # Check if this is a subtotal row
-                        if worksheet.read_string(row_num - 1, 0).startswith('SUBTOTAL'):
+                        # Check if this is a subtotal row using our pre-calculated list
+                        if row_num in subtotal_row_indices:
                             worksheet.set_row(row_num - 1, None, subtotal_format)
                         else:
                             # Apply number formatting to value columns
                             for col_num in [11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25]:
                                 if col_num < len(recon_df.columns):
-                                    worksheet.write_number(row_num - 1, col_num, 
-                                                         recon_df.iloc[row_num - 3, col_num], 
-                                                         number_format)
+                                    try:
+                                        val = recon_df.iloc[row_num - 3, col_num]
+                                        if pd.notna(val) and isinstance(val, (int, float)):
+                                            worksheet.write_number(row_num - 1, col_num, val, number_format)
+                                    except (ValueError, TypeError):
+                                        pass
                     
                     if add_dropdown_validation:
                         worksheet.data_validation('J3:J100000', {'validate': 'list', 'source': ['INVOICE', 'CREDIT', 'DEBIT']})
@@ -1940,7 +1937,7 @@ st.markdown("""
     <div class="brand">🧾 GST Recon Pro v6.0</div>
     <div class="credits">Enterprise GST Reconciliation Engine</div>
     <div class="credits">Developed by <strong>ABHISHEK JAKKULA</strong> • jakkulaabhishek5@gmail.com</div>
-    <div class="version">v6.0.0 • Last Updated: May 2026</div>
+    <div class="version">v6.0.1 • Last Updated: May 2026</div>
     <div style="margin-top: 24px; display: flex; justify-content: center; gap: 24px; flex-wrap: wrap;">
         <a href="#" style="color: var(--text-secondary); text-decoration: none; font-size: 0.95rem;">📚 Documentation</a>
         <a href="#" style="color: var(--text-secondary); text-decoration: none; font-size: 0.95rem;">🎥 Tutorials</a>
