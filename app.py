@@ -3,7 +3,7 @@
 # ============================================================================
 # Author: Abhishek Jakkula
 # Email: jakkulaabhishek5@gmail.com
-# Version: 6.0.1 (Fixed Worksheet Error)
+# Version: 6.0.2 (Enhanced Summary & Modern UI)
 # Last Updated: May 2026
 # License: Proprietary - Enterprise Edition
 # ============================================================================
@@ -32,6 +32,7 @@ import xlsxwriter
 from io import BytesIO
 from difflib import SequenceMatcher
 import os
+from urllib.parse import quote
 
 # Suppress warnings
 warnings.filterwarnings('ignore')
@@ -58,76 +59,152 @@ st.set_page_config(
     }
 )
 
-# ==================== ENHANCED THEME-ADAPTIVE CSS ====================
+# ==================== ULTRA-MODERN THEME-ADAPTIVE CSS ====================
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
     :root {
+        /* Modern Color Palette - Light Theme */
         --primary: #6366f1;
-        --primary-dark: #4f46e5;
+        --primary-hover: #4f46e5;
+        --primary-light: #e0e7ff;
         --secondary: #8b5cf6;
+        --secondary-hover: #7c3aed;
         --accent: #06b6d4;
+        --accent-light: #cffafe;
         --success: #10b981;
+        --success-light: #d1fae5;
         --warning: #f59e0b;
+        --warning-light: #fef3c7;
         --error: #ef4444;
+        --error-light: #fee2e2;
         --info: #3b82f6;
-        --bg-light: #f8fafc;
+        --info-light: #dbeafe;
+        
+        /* Background & Text */
+        --bg-primary: #f8fafc;
+        --bg-secondary: #ffffff;
+        --bg-tertiary: #f1f5f9;
         --bg-card: #ffffff;
+        --bg-hover: #f8fafc;
         --text-primary: #0f172a;
-        --text-secondary: #64748b;
-        --border-light: #e2e8f0;
-        --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-        --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-        --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
-        --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+        --text-secondary: #475569;
+        --text-tertiary: #64748b;
+        --text-muted: #94a3b8;
+        --border-color: #e2e8f0;
+        --border-hover: #cbd5e1;
+        
+        /* Shadows & Effects */
+        --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.03);
+        --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.05), 0 1px 2px -1px rgb(0 0 0 / 0.05);
+        --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.08), 0 2px 4px -2px rgb(0 0 0 / 0.08);
+        --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.08), 0 4px 6px -4px rgb(0 0 0 / 0.08);
+        --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.08), 0 8px 10px -6px rgb(0 0 0 / 0.08);
+        --shadow-2xl: 0 25px 50px -12px rgb(0 0 0 / 0.12);
+        
+        /* Border Radius */
+        --radius-xs: 4px;
         --radius-sm: 8px;
         --radius-md: 12px;
         --radius-lg: 16px;
-        --radius-xl: 24px;
-        --transition: all 0.3s ease;
+        --radius-xl: 20px;
+        --radius-2xl: 24px;
+        --radius-full: 9999px;
+        
+        /* Transitions */
+        --transition-fast: 150ms ease;
+        --transition-normal: 250ms ease;
+        --transition-slow: 350ms ease;
+        
+        /* Glassmorphism */
+        --glass-bg: rgba(255, 255, 255, 0.7);
+        --glass-border: rgba(255, 255, 255, 0.3);
+        --glass-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.1);
     }
 
     [data-theme="dark"] {
-        --bg-light: #0f172a;
+        /* Modern Color Palette - Dark Theme */
+        --bg-primary: #0f172a;
+        --bg-secondary: #1e293b;
+        --bg-tertiary: #334155;
         --bg-card: #1e293b;
-        --text-primary: #f1f5f9;
-        --text-secondary: #94a3b8;
-        --border-light: #334155;
+        --bg-hover: #334155;
+        --text-primary: #f8fafc;
+        --text-secondary: #cbd5e1;
+        --text-tertiary: #94a3b8;
+        --text-muted: #64748b;
+        --border-color: #334155;
+        --border-hover: #475569;
+        
+        --primary-light: #312e81;
+        --secondary-hover: #6d28d9;
+        --accent-light: #164e63;
+        --success-light: #064e3b;
+        --warning-light: #78350f;
+        --error-light: #7f1d1d;
+        --info-light: #1e3a8a;
+        
+        --glass-bg: rgba(30, 41, 59, 0.7);
+        --glass-border: rgba(255, 255, 255, 0.1);
+        --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
     }
 
+    /* Base Styles */
+    * { box-sizing: border-box; }
+    
     html, body, [class*="css"] {
-        font-family: 'Inter', sans-serif;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         color: var(--text-primary);
         scroll-behavior: smooth;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
     }
 
-    .stApp {
-        background: linear-gradient(135deg, var(--bg-light) 0%, #f1f5f9 100%);
+    body {
+        background: var(--bg-primary);
+        background-image: 
+            radial-gradient(at 40% 20%, rgba(99, 102, 241, 0.08) 0px, transparent 50%),
+            radial-gradient(at 80% 0%, rgba(139, 92, 246, 0.08) 0px, transparent 50%),
+            radial-gradient(at 0% 50%, rgba(6, 182, 212, 0.08) 0px, transparent 50%);
         background-attachment: fixed;
         min-height: 100vh;
     }
-    [data-theme="dark"] .stApp {
-        background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+
+    /* App Container */
+    .stApp {
+        background: transparent !important;
     }
 
+    /* Sidebar Enhancement */
     [data-testid="stSidebar"] {
-        background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
-        border-right: 1px solid rgba(255,255,255,0.1);
+        background: linear-gradient(180deg, var(--bg-secondary) 0%, var(--bg-tertiary) 100%);
+        border-right: 1px solid var(--border-color);
         box-shadow: var(--shadow-lg);
-        z-index: 999;
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
     }
 
+    [data-testid="stSidebar"] .stMarkdown {
+        color: var(--text-secondary);
+    }
+
+    /* Main Header - Glassmorphism Style */
     .main-header {
         text-align: center;
-        padding: 2.5rem 1rem;
-        margin-bottom: 2rem;
-        background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 50%, var(--accent) 100%);
-        border-radius: var(--radius-xl);
-        box-shadow: var(--shadow-xl);
+        padding: 3rem 2rem;
+        margin: 1.5rem 0 2.5rem 0;
+        background: var(--glass-bg);
+        border: 1px solid var(--glass-border);
+        border-radius: var(--radius-2xl);
+        box-shadow: var(--glass-shadow);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
         position: relative;
         overflow: hidden;
+        transition: var(--transition-normal);
     }
+
     .main-header::before {
         content: '';
         position: absolute;
@@ -135,169 +212,265 @@ st.markdown("""
         left: -50%;
         width: 200%;
         height: 200%;
-        background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
-        animation: shimmer 3s infinite;
+        background: radial-gradient(ellipse at center, rgba(99, 102, 241, 0.15) 0%, transparent 60%);
+        animation: pulse 8s ease-in-out infinite;
+        pointer-events: none;
     }
-    @keyframes shimmer {
-        0% { transform: rotate(0deg); }
-        100% { transform: rotate(360deg); }
+
+    @keyframes pulse {
+        0%, 100% { opacity: 0.5; transform: scale(1); }
+        50% { opacity: 0.8; transform: scale(1.05); }
     }
+
     .main-header h1 {
-        font-weight: 900 !important;
-        font-size: 3.2rem !important;
-        background: linear-gradient(90deg, #fff, #e0e7ff, #fff);
+        font-weight: 800 !important;
+        font-size: 3rem !important;
+        background: linear-gradient(135deg, var(--primary), var(--secondary), var(--accent));
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         background-clip: text;
         margin: 0 !important;
-        text-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        text-shadow: 0 2px 20px rgba(99, 102, 241, 0.2);
         position: relative;
-        z-index: 1;
-    }
-    .main-header .subtitle {
-        font-size: 1.25rem;
-        color: rgba(255,255,255,0.95);
-        margin: 1rem 0 0 0;
-        line-height: 1.6;
-        position: relative;
-        z-index: 1;
-        max-width: 800px;
-        margin-left: auto;
-        margin-right: auto;
+        z-index: 2;
+        letter-spacing: -0.02em;
     }
 
+    .main-header .subtitle {
+        font-size: 1.15rem;
+        color: var(--text-secondary);
+        margin: 1.25rem 0 0 0;
+        line-height: 1.7;
+        position: relative;
+        z-index: 2;
+        max-width: 850px;
+        margin-left: auto;
+        margin-right: auto;
+        font-weight: 400;
+    }
+
+    .main-header .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 16px;
+        background: linear-gradient(135deg, var(--primary), var(--secondary));
+        color: white;
+        border-radius: var(--radius-full);
+        font-size: 0.85rem;
+        font-weight: 600;
+        margin-top: 1rem;
+        box-shadow: var(--shadow-md);
+    }
+
+    /* Modern Metric Cards */
     .metric-card {
         background: var(--bg-card);
         border-radius: var(--radius-lg);
-        padding: 28px 24px;
-        border: 1px solid var(--border-light);
+        padding: 24px 20px;
+        border: 1px solid var(--border-color);
         box-shadow: var(--shadow-md);
-        transition: var(--transition);
+        transition: var(--transition-normal);
         position: relative;
         overflow: hidden;
         cursor: default;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
     }
+
     .metric-card::before {
         content: '';
         position: absolute;
         top: 0;
         left: 0;
         right: 0;
-        height: 4px;
-        background: linear-gradient(90deg, var(--primary), var(--secondary));
+        height: 3px;
+        background: linear-gradient(90deg, var(--primary), var(--secondary), var(--accent));
+        opacity: 0.8;
     }
+
     .metric-card:hover {
         transform: translateY(-4px);
         box-shadow: var(--shadow-xl);
         border-color: var(--primary);
     }
-    .metric-card .metric-value {
-        font-size: 2.4rem;
-        font-weight: 800;
-        color: var(--text-primary);
-        line-height: 1;
-        margin: 10px 0;
+
+    .metric-card .metric-icon {
+        font-size: 1.8rem;
+        margin-bottom: 8px;
+        display: block;
     }
+
     .metric-card .metric-label {
-        font-size: 0.95rem;
-        color: var(--text-secondary);
+        font-size: 0.85rem;
+        color: var(--text-tertiary);
         font-weight: 600;
         text-transform: uppercase;
         letter-spacing: 0.5px;
+        margin-bottom: 4px;
     }
+
+    .metric-card .metric-value {
+        font-size: 2rem;
+        font-weight: 700;
+        color: var(--text-primary);
+        line-height: 1.2;
+        margin: 4px 0;
+    }
+
+    .metric-card .metric-subtitle {
+        font-size: 0.9rem;
+        color: var(--text-secondary);
+        margin-top: 4px;
+    }
+
     .metric-card .metric-delta {
         display: inline-flex;
         align-items: center;
         gap: 4px;
-        font-size: 0.9rem;
+        font-size: 0.85rem;
         font-weight: 600;
-        padding: 6px 14px;
-        border-radius: 20px;
-        margin-top: 10px;
+        padding: 4px 12px;
+        border-radius: var(--radius-full);
+        margin-top: 8px;
+        align-self: flex-start;
     }
-    .metric-delta.positive { background: rgba(16, 185, 129, 0.15); color: var(--success); }
-    .metric-delta.negative { background: rgba(239, 68, 68, 0.15); color: var(--error); }
-    .metric-delta.neutral { background: rgba(100, 116, 139, 0.15); color: var(--text-secondary); }
 
+    .metric-delta.positive { 
+        background: var(--success-light); 
+        color: var(--success); 
+    }
+    .metric-delta.negative { 
+        background: var(--error-light); 
+        color: var(--error); 
+    }
+    .metric-delta.neutral { 
+        background: var(--bg-tertiary); 
+        color: var(--text-tertiary); 
+    }
+    .metric-delta.warning { 
+        background: var(--warning-light); 
+        color: var(--warning); 
+    }
+
+    /* Insight Cards - Enhanced */
     .insight-card {
         background: var(--bg-card);
         border-radius: var(--radius-lg);
-        padding: 22px 26px;
+        padding: 20px 24px;
         margin-bottom: 16px;
-        border-left: 5px solid var(--primary);
+        border-left: 4px solid var(--primary);
         box-shadow: var(--shadow-md);
-        border: 1px solid var(--border-light);
-        transition: var(--transition);
+        border: 1px solid var(--border-color);
+        transition: var(--transition-normal);
+        display: flex;
+        align-items: flex-start;
+        gap: 14px;
     }
+
     .insight-card:hover {
         box-shadow: var(--shadow-lg);
         transform: translateX(4px);
     }
-    .insight-card.warning {
-        border-left-color: var(--warning);
-        background: linear-gradient(135deg, rgba(245, 158, 11, 0.08), transparent);
+
+    .insight-card .insight-icon {
+        font-size: 1.5rem;
+        flex-shrink: 0;
+        margin-top: 2px;
     }
-    .insight-card.success {
-        border-left-color: var(--success);
-        background: linear-gradient(135deg, rgba(16, 185, 129, 0.08), transparent);
+
+    .insight-card .insight-content {
+        flex: 1;
     }
-    .insight-card.error {
-        border-left-color: var(--error);
-        background: linear-gradient(135deg, rgba(239, 68, 68, 0.08), transparent);
-    }
-    .insight-card.info {
-        border-left-color: var(--info);
-        background: linear-gradient(135deg, rgba(59, 130, 246, 0.08), transparent);
-    }
+
     .insight-card .insight-title {
         font-weight: 700;
-        font-size: 1.15rem;
+        font-size: 1.05rem;
         color: var(--text-primary);
-        margin-bottom: 10px;
+        margin-bottom: 6px;
         display: flex;
         align-items: center;
-        gap: 10px;
+        gap: 8px;
     }
+
     .insight-card .insight-message {
         color: var(--text-secondary);
         line-height: 1.6;
         font-size: 0.95rem;
     }
 
+    .insight-card.warning {
+        border-left-color: var(--warning);
+        background: linear-gradient(135deg, rgba(245, 158, 11, 0.06), transparent);
+    }
+    .insight-card.success {
+        border-left-color: var(--success);
+        background: linear-gradient(135deg, rgba(16, 185, 129, 0.06), transparent);
+    }
+    .insight-card.error {
+        border-left-color: var(--error);
+        background: linear-gradient(135deg, rgba(239, 68, 68, 0.06), transparent);
+    }
+    .insight-card.info {
+        border-left-color: var(--info);
+        background: linear-gradient(135deg, rgba(59, 130, 246, 0.06), transparent);
+    }
+
+    /* Section Cards */
     .section-card {
         background: var(--bg-card);
         border-radius: var(--radius-lg);
-        padding: 32px;
+        padding: 28px;
         margin-bottom: 24px;
         box-shadow: var(--shadow-md);
-        border: 1px solid var(--border-light);
+        border: 1px solid var(--border-color);
+        transition: var(--transition-normal);
     }
+
+    .section-card:hover {
+        box-shadow: var(--shadow-lg);
+    }
+
     .section-card h3 {
         font-weight: 700;
         color: var(--text-primary);
-        margin-bottom: 24px;
-        padding-bottom: 14px;
-        border-bottom: 2px solid var(--border-light);
+        margin: 0 0 20px 0;
+        padding-bottom: 16px;
+        border-bottom: 2px solid var(--border-color);
         display: flex;
         align-items: center;
         gap: 12px;
-        font-size: 1.3rem;
+        font-size: 1.25rem;
     }
-    .section-card h3 .icon { font-size: 1.5rem; }
 
+    .section-card h3 .icon { 
+        font-size: 1.4rem; 
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 32px;
+        height: 32px;
+        background: var(--primary-light);
+        border-radius: var(--radius-md);
+    }
+
+    /* Modern Buttons */
     .stButton>button {
-        background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+        background: linear-gradient(135deg, var(--primary), var(--primary-hover));
         color: white !important;
         border-radius: var(--radius-md);
-        padding: 14px 32px;
+        padding: 12px 28px;
         font-weight: 600;
         border: none;
-        transition: var(--transition);
+        transition: var(--transition-normal);
         box-shadow: var(--shadow-md);
         position: relative;
         overflow: hidden;
-        font-size: 1rem;
+        font-size: 0.95rem;
+        letter-spacing: 0.3px;
     }
+
     .stButton>button::before {
         content: '';
         position: absolute;
@@ -305,304 +478,904 @@ st.markdown("""
         left: -100%;
         width: 100%;
         height: 100%;
-        background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
-        transition: left 0.5s;
+        background: linear-gradient(90deg, transparent, rgba(255,255,255,0.25), transparent);
+        transition: left 0.5s ease;
     }
-    .stButton>button:hover::before { left: 100%; }
+
+    .stButton>button:hover::before { 
+        left: 100%; 
+    }
+
     .stButton>button:hover {
         transform: translateY(-2px);
         box-shadow: var(--shadow-lg);
-        background: linear-gradient(135deg, var(--primary-dark), #4338ca);
+        background: linear-gradient(135deg, var(--primary-hover), var(--secondary-hover));
     }
 
+    .stButton>button:active {
+        transform: translateY(0);
+    }
+
+    /* DataFrames - Modern Styling */
     [data-testid="stDataFrame"] {
         border-radius: var(--radius-lg);
         overflow: hidden;
         box-shadow: var(--shadow-md);
-        border: 1px solid var(--border-light);
+        border: 1px solid var(--border-color);
+        background: var(--bg-card);
     }
+
     [data-testid="stDataFrame"] th {
         background: linear-gradient(135deg, var(--primary), var(--secondary));
         color: white !important;
         font-weight: 600;
-        padding: 14px 18px;
+        padding: 14px 16px;
         text-transform: uppercase;
-        font-size: 0.85rem;
+        font-size: 0.8rem;
         letter-spacing: 0.5px;
-    }
-    [data-testid="stDataFrame"] td {
-        padding: 12px 18px;
-        border-bottom: 1px solid var(--border-light);
-        font-size: 0.9rem;
-    }
-    [data-testid="stDataFrame"] tr:hover {
-        background: rgba(99, 102, 241, 0.05);
+        border: none;
     }
 
+    [data-testid="stDataFrame"] td {
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--border-color);
+        font-size: 0.9rem;
+        color: var(--text-secondary);
+    }
+
+    [data-testid="stDataFrame"] tr:hover {
+        background: var(--bg-hover);
+    }
+
+    [data-testid="stDataFrame"] tr:last-child td {
+        border-bottom: none;
+    }
+
+    /* Status Badges */
     .status-badge {
         display: inline-flex;
         align-items: center;
         gap: 6px;
-        padding: 6px 14px;
-        border-radius: 20px;
-        font-size: 0.85rem;
+        padding: 5px 14px;
+        border-radius: var(--radius-full);
+        font-size: 0.8rem;
         font-weight: 600;
         text-transform: uppercase;
-        letter-spacing: 0.5px;
+        letter-spacing: 0.4px;
+        white-space: nowrap;
     }
-    .status-exact { background: rgba(16, 185, 129, 0.15); color: #065f46; }
-    .status-suggested { background: rgba(6, 182, 212, 0.15); color: #0e7490; }
-    .status-mismatch { background: rgba(245, 158, 11, 0.15); color: #92400e; }
-    .status-missing-2b { background: rgba(239, 68, 68, 0.15); color: #991b1b; }
-    .status-missing-pr { background: rgba(139, 92, 246, 0.15); color: #5b21b6; }
 
+    .status-exact { 
+        background: var(--success-light); 
+        color: var(--success); 
+        border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+    .status-suggested { 
+        background: var(--accent-light); 
+        color: #0e7490; 
+        border: 1px solid rgba(6, 182, 212, 0.3);
+    }
+    .status-mismatch { 
+        background: var(--warning-light); 
+        color: #92400e; 
+        border: 1px solid rgba(245, 158, 11, 0.3);
+    }
+    .status-missing-2b { 
+        background: var(--error-light); 
+        color: #991b1b; 
+        border: 1px solid rgba(239, 68, 68, 0.3);
+    }
+    .status-missing-pr { 
+        background: var(--info-light); 
+        color: #1e40af; 
+        border: 1px solid rgba(59, 130, 246, 0.3);
+    }
+
+    /* Tabs Enhancement */
     .stTabs [data-baseweb="tab-list"] {
-        gap: 12px;
-        background: rgba(255,255,255,0.6);
-        padding: 10px;
+        gap: 8px;
+        background: var(--bg-tertiary);
+        padding: 6px;
         border-radius: var(--radius-lg);
-        backdrop-filter: blur(8px);
-        border: 1px solid var(--border-light);
+        border: 1px solid var(--border-color);
     }
-    [data-theme="dark"] .stTabs [data-baseweb="tab-list"] {
-        background: rgba(30, 41, 59, 0.6);
-    }
+
     .stTabs [data-baseweb="tab"] {
         border-radius: var(--radius-md);
-        padding: 14px 28px;
+        padding: 12px 24px;
         font-weight: 600;
-        transition: var(--transition);
-        color: var(--text-secondary);
-        font-size: 0.95rem;
+        transition: var(--transition-fast);
+        color: var(--text-tertiary);
+        font-size: 0.9rem;
+        border: none !important;
     }
+
+    .stTabs [data-baseweb="tab"]:hover {
+        background: var(--bg-hover);
+        color: var(--text-primary);
+    }
+
     .stTabs [aria-selected="true"] {
         background: linear-gradient(135deg, var(--primary), var(--secondary));
         color: white !important;
         box-shadow: var(--shadow-md);
-        transform: translateY(-2px);
+        transform: translateY(-1px);
     }
 
+    /* Progress Components */
     .progress-container {
         background: var(--bg-card);
         border-radius: var(--radius-lg);
-        padding: 24px;
-        margin: 20px 0;
-        border: 1px solid var(--border-light);
-        box-shadow: var(--shadow-md);
+        padding: 20px;
+        margin: 16px 0;
+        border: 1px solid var(--border-color);
+        box-shadow: var(--shadow-sm);
     }
+
     .progress-bar {
-        height: 10px;
-        background: var(--border-light);
-        border-radius: 5px;
+        height: 8px;
+        background: var(--bg-tertiary);
+        border-radius: var(--radius-full);
         overflow: hidden;
-        margin: 12px 0;
+        margin: 10px 0;
     }
+
     .progress-fill {
         height: 100%;
         background: linear-gradient(90deg, var(--primary), var(--accent));
-        border-radius: 5px;
-        transition: width 0.3s ease;
+        border-radius: var(--radius-full);
+        transition: width 0.4s ease;
     }
 
+    /* Footer Enhancement */
     .footer {
         text-align: center;
-        padding: 36px 24px;
+        padding: 40px 24px;
         margin-top: 60px;
-        background: linear-gradient(135deg, var(--bg-card), var(--bg-light));
-        border-radius: var(--radius-xl) var(--radius-xl) 0 0;
-        border-top: 1px solid var(--border-light);
-    }
-    .footer .brand {
-        font-weight: 800;
-        font-size: 1.3rem;
-        background: linear-gradient(90deg, var(--primary), var(--secondary));
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-    }
-    .footer .credits {
-        color: var(--text-secondary);
-        font-size: 0.95rem;
-        margin: 10px 0;
-    }
-    .footer .version {
-        display: inline-block;
-        background: var(--border-light);
-        padding: 6px 16px;
-        border-radius: 20px;
-        font-size: 0.85rem;
-        color: var(--text-secondary);
-        margin-top: 16px;
+        background: linear-gradient(135deg, var(--bg-card), var(--bg-tertiary));
+        border-radius: var(--radius-2xl) var(--radius-2xl) 0 0;
+        border-top: 1px solid var(--border-color);
+        position: relative;
     }
 
+    .footer::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 80%;
+        height: 1px;
+        background: linear-gradient(90deg, transparent, var(--border-color), transparent);
+    }
+
+    .footer .brand {
+        font-weight: 800;
+        font-size: 1.4rem;
+        background: linear-gradient(135deg, var(--primary), var(--secondary));
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin-bottom: 8px;
+    }
+
+    .footer .credits {
+        color: var(--text-tertiary);
+        font-size: 0.95rem;
+        margin: 4px 0;
+    }
+
+    .footer .version {
+        display: inline-block;
+        background: var(--bg-tertiary);
+        padding: 6px 18px;
+        border-radius: var(--radius-full);
+        font-size: 0.85rem;
+        color: var(--text-tertiary);
+        margin-top: 16px;
+        border: 1px solid var(--border-color);
+    }
+
+    .footer a {
+        color: var(--text-secondary);
+        text-decoration: none;
+        transition: var(--transition-fast);
+        padding: 4px 8px;
+        border-radius: var(--radius-sm);
+    }
+
+    .footer a:hover {
+        color: var(--primary);
+        background: var(--primary-light);
+    }
+
+    /* Quick Actions Grid */
     .quick-actions {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
         gap: 16px;
         margin: 24px 0;
     }
+
     .quick-action-btn {
         background: var(--bg-card);
-        border: 2px solid var(--border-light);
-        border-radius: var(--radius-md);
-        padding: 20px;
+        border: 2px solid var(--border-color);
+        border-radius: var(--radius-lg);
+        padding: 20px 16px;
         text-align: center;
         cursor: pointer;
-        transition: var(--transition);
+        transition: var(--transition-normal);
         text-decoration: none;
         color: var(--text-primary);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 10px;
     }
+
     .quick-action-btn:hover {
         border-color: var(--primary);
-        background: rgba(99, 102, 241, 0.05);
-        transform: translateY(-3px);
-        box-shadow: var(--shadow-md);
+        background: linear-gradient(135deg, rgba(99, 102, 241, 0.05), rgba(139, 92, 246, 0.05));
+        transform: translateY(-4px);
+        box-shadow: var(--shadow-lg);
     }
-    .quick-action-btn .icon { font-size: 2rem; margin-bottom: 10px; display: block; }
-    .quick-action-btn .label { font-weight: 600; font-size: 0.95rem; }
 
-    @keyframes fadeInUp {
-        from { opacity: 0; transform: translateY(20px); }
-        to { opacity: 1; transform: translateY(0); }
+    .quick-action-btn .icon { 
+        font-size: 2rem; 
+        display: block;
+        transition: var(--transition-fast);
     }
-    .animate-fade-in { animation: fadeInUp 0.5s ease forwards; }
-    .animate-fade-in:nth-child(1) { animation-delay: 0.1s; }
-    .animate-fade-in:nth-child(2) { animation-delay: 0.2s; }
-    .animate-fade-in:nth-child(3) { animation-delay: 0.3s; }
-    .animate-fade-in:nth-child(4) { animation-delay: 0.4s; }
 
+    .quick-action-btn:hover .icon {
+        transform: scale(1.1);
+    }
+
+    .quick-action-btn .label { 
+        font-weight: 600; 
+        font-size: 0.9rem; 
+    }
+
+    /* Theme Toggle */
     .theme-toggle {
         position: fixed;
-        bottom: 28px;
-        right: 28px;
+        bottom: 24px;
+        right: 24px;
         z-index: 1000;
     }
+
     .theme-toggle button {
         background: var(--bg-card);
-        border: 2px solid var(--border-light);
-        border-radius: 50%;
-        width: 52px;
-        height: 52px;
+        border: 2px solid var(--border-color);
+        border-radius: var(--radius-full);
+        width: 48px;
+        height: 48px;
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: 1.3rem;
+        font-size: 1.2rem;
         cursor: pointer;
         box-shadow: var(--shadow-lg);
-        transition: var(--transition);
-    }
-    .theme-toggle button:hover {
-        transform: scale(1.1);
-        border-color: var(--primary);
+        transition: var(--transition-normal);
+        color: var(--text-primary);
     }
 
+    .theme-toggle button:hover {
+        transform: scale(1.1) rotate(15deg);
+        border-color: var(--primary);
+        background: var(--primary-light);
+    }
+
+    /* Document Type Badges */
     .doc-type-badge {
-        display: inline-block;
+        display: inline-flex;
+        align-items: center;
         padding: 4px 12px;
-        border-radius: 6px;
-        font-size: 0.85rem;
+        border-radius: var(--radius-full);
+        font-size: 0.8rem;
         font-weight: 600;
         margin: 2px;
-    }
-    .doc-type-invoice { background: rgba(16, 185, 129, 0.15); color: #065f46; }
-    .doc-type-credit { background: rgba(239, 68, 68, 0.15); color: #991b1b; }
-    .doc-type-debit { background: rgba(245, 158, 11, 0.15); color: #92400e; }
-
-    .df-exact { color: #065f46 !important; background-color: rgba(16, 185, 129, 0.1) !important; font-weight: 600 !important; }
-    .df-suggested { color: #0e7490 !important; background-color: rgba(6, 182, 212, 0.1) !important; font-weight: 600 !important; }
-    .df-value-mismatch { color: #92400e !important; background-color: rgba(245, 158, 11, 0.1) !important; font-weight: 600 !important; }
-    .df-doc-type-mismatch { color: #7c3aed !important; background-color: rgba(139, 92, 246, 0.1) !important; font-weight: 600 !important; }
-    .df-cross-state { color: #4f46e5 !important; background-color: rgba(99, 102, 241, 0.1) !important; font-weight: 600 !important; }
-    .df-missing-2b { color: #991b1b !important; background-color: rgba(239, 68, 68, 0.1) !important; font-weight: 600 !important; }
-    .df-missing-pr { color: #5b21b6 !important; background-color: rgba(139, 92, 246, 0.1) !important; font-weight: 600 !important; }
-
-    @media (max-width: 768px) {
-        .main-header h1 { font-size: 2.2rem !important; }
-        .main-header .subtitle { font-size: 1rem; }
-        .metric-card .metric-value { font-size: 2rem; }
-        .section-card { padding: 24px; }
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
     }
 
-    @keyframes pulse {
-        0%, 100% { opacity: 1; }
-        50% { opacity: 0.5; }
+    .doc-type-invoice { 
+        background: var(--success-light); 
+        color: #065f46; 
+        border: 1px solid rgba(16, 185, 129, 0.3);
     }
-    .loading { animation: pulse 1.5s ease-in-out infinite; }
-
-    .toast {
-        position: fixed;
-        bottom: 20px;
-        right: 20px;
-        padding: 16px 24px;
-        border-radius: 12px;
-        box-shadow: var(--shadow-lg);
-        z-index: 10000;
-        animation: slideIn 0.3s ease;
-        max-width: 400px;
+    .doc-type-credit { 
+        background: var(--error-light); 
+        color: #991b1b; 
+        border: 1px solid rgba(239, 68, 68, 0.3);
     }
-    .toast.success { background: var(--success); color: white; }
-    .toast.error { background: var(--error); color: white; }
-    .toast.warning { background: var(--warning); color: #1f2937; }
-    @keyframes slideIn {
-        from { transform: translateX(100%); opacity: 0; }
-        to { transform: translateX(0); opacity: 1; }
+    .doc-type-debit { 
+        background: var(--warning-light); 
+        color: #92400e; 
+        border: 1px solid rgba(245, 158, 11, 0.3);
     }
 
+    /* DataFrame Row Styling Classes */
+    .df-exact { 
+        color: #065f46 !important; 
+        background-color: rgba(16, 185, 129, 0.08) !important; 
+        font-weight: 600 !important; 
+    }
+    .df-suggested { 
+        color: #0e7490 !important; 
+        background-color: rgba(6, 182, 212, 0.08) !important; 
+        font-weight: 600 !important; 
+    }
+    .df-value-mismatch { 
+        color: #92400e !important; 
+        background-color: rgba(245, 158, 11, 0.08) !important; 
+        font-weight: 600 !important; 
+    }
+    .df-doc-type-mismatch { 
+        color: #7c3aed !important; 
+        background-color: rgba(139, 92, 246, 0.08) !important; 
+        font-weight: 600 !important; 
+    }
+    .df-cross-state { 
+        color: #4f46e5 !important; 
+        background-color: rgba(99, 102, 241, 0.08) !important; 
+        font-weight: 600 !important; 
+    }
+    .df-missing-2b { 
+        color: #991b1b !important; 
+        background-color: rgba(239, 68, 68, 0.08) !important; 
+        font-weight: 600 !important; 
+    }
+    .df-missing-pr { 
+        color: #1e40af !important; 
+        background-color: rgba(59, 130, 246, 0.08) !important; 
+        font-weight: 600 !important; 
+    }
+
+    /* Summary Box */
     .summary-box {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        background: linear-gradient(135deg, var(--primary), var(--secondary));
         border-radius: var(--radius-lg);
         padding: 24px;
         color: white;
         margin: 16px 0;
         box-shadow: var(--shadow-lg);
+        position: relative;
+        overflow: hidden;
     }
+
+    .summary-box::before {
+        content: '';
+        position: absolute;
+        top: -50%;
+        right: -50%;
+        width: 100%;
+        height: 200%;
+        background: radial-gradient(circle, rgba(255,255,255,0.15) 0%, transparent 60%);
+        pointer-events: none;
+    }
+
     .summary-box h4 {
         margin: 0 0 16px 0;
-        font-size: 1.2rem;
+        font-size: 1.15rem;
         font-weight: 700;
+        position: relative;
+        z-index: 1;
     }
+
     .summary-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
         gap: 16px;
+        position: relative;
+        z-index: 1;
     }
+
     .summary-item {
-        background: rgba(255,255,255,0.1);
-        padding: 16px;
+        background: rgba(255,255,255,0.12);
+        padding: 14px 16px;
         border-radius: var(--radius-md);
         backdrop-filter: blur(10px);
+        border: 1px solid rgba(255,255,255,0.2);
     }
+
     .summary-item .label {
-        font-size: 0.85rem;
+        font-size: 0.8rem;
         opacity: 0.9;
         margin-bottom: 4px;
+        font-weight: 500;
     }
+
     .summary-item .value {
-        font-size: 1.5rem;
+        font-size: 1.4rem;
         font-weight: 700;
+    }
+
+    /* Animations */
+    @keyframes fadeInUp {
+        from { 
+            opacity: 0; 
+            transform: translateY(24px); 
+        }
+        to { 
+            opacity: 1; 
+            transform: translateY(0); 
+        }
+    }
+
+    @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+    }
+
+    .animate-fade-in { 
+        animation: fadeInUp 0.5s ease forwards; 
+        opacity: 0;
+    }
+    
+    .animate-fade-in:nth-child(1) { animation-delay: 0.1s; }
+    .animate-fade-in:nth-child(2) { animation-delay: 0.15s; }
+    .animate-fade-in:nth-child(3) { animation-delay: 0.2s; }
+    .animate-fade-in:nth-child(4) { animation-delay: 0.25s; }
+    .animate-fade-in:nth-child(5) { animation-delay: 0.3s; }
+
+    .animate-fade {
+        animation: fadeIn 0.4s ease forwards;
+    }
+
+    /* Loading Animation */
+    @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+    }
+
+    .loading { 
+        animation: pulse 1.5s ease-in-out infinite; 
+    }
+
+    /* Toast Notifications */
+    .toast {
+        position: fixed;
+        bottom: 24px;
+        right: 24px;
+        padding: 14px 22px;
+        border-radius: var(--radius-lg);
+        box-shadow: var(--shadow-xl);
+        z-index: 10000;
+        animation: slideIn 0.3s ease;
+        max-width: 420px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        border: 1px solid var(--border-color);
+    }
+
+    .toast.success { 
+        background: var(--bg-card); 
+        border-left: 4px solid var(--success);
+        color: var(--text-primary);
+    }
+    .toast.error { 
+        background: var(--bg-card); 
+        border-left: 4px solid var(--error);
+        color: var(--text-primary);
+    }
+    .toast.warning { 
+        background: var(--bg-card); 
+        border-left: 4px solid var(--warning);
+        color: var(--text-primary);
+    }
+
+    @keyframes slideIn {
+        from { 
+            transform: translateX(100%); 
+            opacity: 0; 
+        }
+        to { 
+            transform: translateX(0); 
+            opacity: 1; 
+        }
+    }
+
+    /* Responsive Design */
+    @media (max-width: 1024px) {
+        .main-header h1 { font-size: 2.4rem !important; }
+        .main-header .subtitle { font-size: 1rem; }
+        .metric-card .metric-value { font-size: 1.8rem; }
+        .section-card { padding: 24px; }
+    }
+
+    @media (max-width: 768px) {
+        .main-header { padding: 2rem 1.5rem; }
+        .main-header h1 { font-size: 2rem !important; }
+        .metric-card { padding: 20px 16px; }
+        .metric-card .metric-value { font-size: 1.6rem; }
+        .quick-actions { grid-template-columns: repeat(2, 1fr); }
+        .section-card { padding: 20px; }
+        .footer { padding: 32px 16px; }
+    }
+
+    @media (max-width: 480px) {
+        .quick-actions { grid-template-columns: 1fr; }
+        .metric-card .metric-value { font-size: 1.4rem; }
+        .stTabs [data-baseweb="tab"] { padding: 10px 16px; font-size: 0.85rem; }
+    }
+
+    /* Form Elements Enhancement */
+    .stTextInput > div > div > input,
+    .stNumberInput > div > div > input,
+    .stSelectbox > div > div > div {
+        border-radius: var(--radius-md);
+        border: 2px solid var(--border-color);
+        transition: var(--transition-fast);
+        background: var(--bg-secondary);
+        color: var(--text-primary);
+    }
+
+    .stTextInput > div > div > input:focus,
+    .stNumberInput > div > div > input:focus,
+    .stSelectbox > div > div > div:focus {
+        border-color: var(--primary);
+        box-shadow: 0 0 0 3px var(--primary-light);
+        outline: none;
+    }
+
+    /* Checkbox & Radio Enhancement */
+    .stCheckbox label,
+    .stRadio label {
+        font-weight: 500;
+        color: var(--text-secondary);
+    }
+
+    /* Slider Enhancement */
+    .stSlider > div > div > div {
+        background: var(--primary) !important;
+    }
+
+    /* Expander Enhancement */
+    .streamlit-expanderHeader {
+        background: var(--bg-tertiary);
+        border-radius: var(--radius-md);
+        border: 1px solid var(--border-color);
+        font-weight: 600;
+        padding: 12px 16px;
+        transition: var(--transition-fast);
+    }
+
+    .streamlit-expanderHeader:hover {
+        background: var(--bg-hover);
+        border-color: var(--primary);
+    }
+
+    /* Chart Containers */
+    .chart-container {
+        background: var(--bg-card);
+        border-radius: var(--radius-lg);
+        padding: 20px;
+        border: 1px solid var(--border-color);
+        box-shadow: var(--shadow-sm);
+        margin: 16px 0;
+    }
+
+    /* Status Legend */
+    .status-legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        padding: 16px;
+        background: var(--bg-tertiary);
+        border-radius: var(--radius-md);
+        margin: 16px 0;
+    }
+
+    .legend-item {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 0.85rem;
+        color: var(--text-secondary);
+    }
+
+    .legend-dot {
+        width: 12px;
+        height: 12px;
+        border-radius: var(--radius-full);
+        display: inline-block;
+    }
+
+    /* Top Parties Table */
+    .top-parties-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.9rem;
+    }
+
+    .top-parties-table th {
+        background: var(--bg-tertiary);
+        padding: 12px 14px;
+        text-align: left;
+        font-weight: 600;
+        color: var(--text-primary);
+        border-bottom: 2px solid var(--border-color);
+    }
+
+    .top-parties-table td {
+        padding: 12px 14px;
+        border-bottom: 1px solid var(--border-color);
+        color: var(--text-secondary);
+    }
+
+    .top-parties-table tr:hover {
+        background: var(--bg-hover);
+    }
+
+    .top-parties-table .rank {
+        font-weight: 700;
+        color: var(--primary);
+        width: 40px;
+    }
+
+    .top-parties-table .amount {
+        font-weight: 600;
+        color: var(--text-primary);
+        text-align: right;
+    }
+
+    /* Match Status Summary Grid */
+    .match-summary-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 16px;
+        margin: 20px 0;
+    }
+
+    .match-status-card {
+        background: var(--bg-card);
+        border-radius: var(--radius-lg);
+        padding: 20px;
+        border: 1px solid var(--border-color);
+        border-left: 4px solid var(--primary);
+        box-shadow: var(--shadow-sm);
+        transition: var(--transition-normal);
+    }
+
+    .match-status-card:hover {
+        box-shadow: var(--shadow-md);
+        transform: translateY(-2px);
+    }
+
+    .match-status-card.exact { border-left-color: var(--success); }
+    .match-status-card.suggested { border-left-color: var(--accent); }
+    .match-status-card.mismatch { border-left-color: var(--warning); }
+    .match-status-card.missing-2b { border-left-color: var(--error); }
+    .match-status-card.missing-pr { border-left-color: var(--info); }
+
+    .match-status-card .status-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 12px;
+    }
+
+    .match-status-card .status-name {
+        font-weight: 700;
+        font-size: 1rem;
+        color: var(--text-primary);
+    }
+
+    .match-status-card .status-count {
+        background: var(--bg-tertiary);
+        padding: 4px 12px;
+        border-radius: var(--radius-full);
+        font-weight: 700;
+        font-size: 0.9rem;
+        color: var(--text-primary);
+    }
+
+    .match-status-card .status-details {
+        font-size: 0.9rem;
+        color: var(--text-secondary);
+        line-height: 1.6;
+    }
+
+    .match-status-card .status-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        color: var(--primary);
+        font-weight: 600;
+        font-size: 0.85rem;
+        margin-top: 10px;
+        text-decoration: none;
+        transition: var(--transition-fast);
+    }
+
+    .match-status-card .status-link:hover {
+        color: var(--primary-hover);
+        text-decoration: underline;
+    }
+
+    /* Excel Hyperlink Style */
+    .excel-link {
+        color: var(--info);
+        text-decoration: none;
+        font-weight: 500;
+    }
+
+    .excel-link:hover {
+        text-decoration: underline;
+    }
+
+    /* Formula Display */
+    .formula-box {
+        background: var(--bg-tertiary);
+        border-radius: var(--radius-md);
+        padding: 12px 16px;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.85rem;
+        color: var(--text-secondary);
+        margin: 8px 0;
+        border-left: 3px solid var(--accent);
+        overflow-x: auto;
+    }
+
+    /* Party Card */
+    .party-card {
+        background: var(--bg-card);
+        border-radius: var(--radius-md);
+        padding: 16px;
+        border: 1px solid var(--border-color);
+        margin: 8px 0;
+        transition: var(--transition-fast);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+    }
+
+    .party-card:hover {
+        border-color: var(--primary);
+        box-shadow: var(--shadow-sm);
+    }
+
+    .party-info {
+        flex: 1;
+    }
+
+    .party-name {
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: 4px;
+    }
+
+    .party-gstin {
+        font-size: 0.8rem;
+        color: var(--text-tertiary);
+        font-family: 'JetBrains Mono', monospace;
+    }
+
+    .party-stats {
+        text-align: right;
+    }
+
+    .party-value {
+        font-weight: 700;
+        color: var(--text-primary);
+        font-size: 1.1rem;
+    }
+
+    .party-label {
+        font-size: 0.8rem;
+        color: var(--text-tertiary);
+    }
+
+    /* Chart Legend Enhancement */
+    .chart-legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 16px;
+        justify-content: center;
+        padding: 16px;
+        background: var(--bg-tertiary);
+        border-radius: var(--radius-md);
+        margin: 16px 0;
+    }
+
+    .legend-item-chart {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 0.9rem;
+        color: var(--text-secondary);
+    }
+
+    .legend-color {
+        width: 20px;
+        height: 20px;
+        border-radius: var(--radius-sm);
+        display: inline-block;
+    }
+
+    /* Responsive Table Wrapper */
+    .table-responsive {
+        overflow-x: auto;
+        border-radius: var(--radius-md);
+        border: 1px solid var(--border-color);
+    }
+
+    /* Card Grid Layout */
+    .card-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 20px;
+        margin: 20px 0;
+    }
+
+    /* Badge Animation */
+    @keyframes badgePulse {
+        0% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.4); }
+        70% { box-shadow: 0 0 0 8px rgba(99, 102, 241, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0); }
+    }
+
+    .badge-pulse {
+        animation: badgePulse 2s infinite;
+    }
+
+    /* Print Styles */
+    @media print {
+        .theme-toggle, .stButton, .footer { display: none !important; }
+        .main-header, .section-card { box-shadow: none !important; border: 1px solid #ccc !important; }
+        body { background: white !important; }
     }
 </style>
 
 <!-- Theme Toggle Script -->
 <script>
+// Initialize theme on load
 const savedTheme = localStorage.getItem('gst-recon-theme');
 const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
 const initialTheme = savedTheme || (systemPrefersDark ? 'dark' : 'light');
+
 if (initialTheme === 'dark') {
     document.documentElement.setAttribute('data-theme', 'dark');
 }
+
+// Theme toggle function
 function toggleTheme() {
     const currentTheme = document.documentElement.getAttribute('data-theme');
     const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
     document.documentElement.setAttribute('data-theme', newTheme);
     localStorage.setItem('gst-recon-theme', newTheme);
-    if (window.Streamlit) {
+    
+    // Notify Streamlit if component exists
+    if (window.Streamlit && window.Streamlit.setComponentValue) {
         window.Streamlit.setComponentValue(newTheme);
     }
 }
+
+// Keyboard shortcut: Ctrl+T to toggle theme
 document.addEventListener('keydown', function(e) {
     if (e.ctrlKey && e.key === 't') {
         e.preventDefault();
         toggleTheme();
+    }
+});
+
+// Smooth scroll for anchor links
+document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+    anchor.addEventListener('click', function(e) {
+        e.preventDefault();
+        const target = document.querySelector(this.getAttribute('href'));
+        if (target) {
+            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    });
+});
+
+// Add loading state to buttons
+document.addEventListener('click', function(e) {
+    if (e.target.tagName === 'BUTTON' && e.target.closest('.stButton')) {
+        e.target.classList.add('loading');
+        setTimeout(() => e.target.classList.remove('loading'), 2000);
     }
 });
 </script>
@@ -611,33 +1384,37 @@ document.addEventListener('keydown', function(e) {
 # ==================== THEME TOGGLE BUTTON ====================
 st.markdown("""
 <div class="theme-toggle">
-    <button onclick="toggleTheme()" title="Toggle Dark/Light Mode (Ctrl+T)">🌓</button>
+    <button onclick="toggleTheme()" title="Toggle Dark/Light Mode (Ctrl+T)" aria-label="Toggle theme">🌓</button>
 </div>
 """, unsafe_allow_html=True)
 
 # ==================== SIDEBAR - ENHANCED ====================
 with st.sidebar:
     st.markdown("""
-    <div style="text-align: center; padding: 24px 0; border-bottom: 1px solid rgba(255,255,255,0.1); margin-bottom: 28px;">
-        <div style="font-size: 3rem; margin-bottom: 10px;">🧾</div>
-        <h3 style="margin: 0; color: #fff; font-size: 1.4rem;">GST Recon Pro</h3>
-        <p style="margin: 6px 0 0 0; color: #94a3b8; font-size: 0.9rem;">v6.0 • Enterprise Edition</p>
+    <div style="text-align: center; padding: 28px 0; border-bottom: 1px solid var(--border-color); margin-bottom: 24px;">
+        <div style="font-size: 3.5rem; margin-bottom: 8px; display: inline-flex; align-items: center; justify-content: center; width: 80px; height: 80px; background: linear-gradient(135deg, var(--primary), var(--secondary)); border-radius: var(--radius-lg); color: white; box-shadow: var(--shadow-lg);">🧾</div>
+        <h3 style="margin: 16px 0 4px 0; color: var(--text-primary); font-size: 1.5rem; font-weight: 700;">GST Recon Pro</h3>
+        <p style="margin: 0; color: var(--text-tertiary); font-size: 0.9rem;">v6.0.2 • Enterprise Edition</p>
+        <div style="margin-top: 12px;">
+            <span style="display: inline-flex; align-items: center; gap: 4px; padding: 4px 12px; background: var(--success-light); color: var(--success); border-radius: var(--radius-full); font-size: 0.8rem; font-weight: 600;">✅ Operational</span>
+        </div>
     </div>
     """, unsafe_allow_html=True)
     
     st.markdown("### ⚡ Quick Actions")
     col_q1, col_q2 = st.columns(2)
     with col_q1:
-        if st.button("📥 Load Sample", use_container_width=True, key="btn_load_sample"):
+        if st.button("📥 Load Sample", use_container_width=True, key="btn_load_sample", help="Download sample templates"):
             st.session_state.load_sample = True
             st.rerun()
     with col_q2:
-        if st.button("🔄 Reset", use_container_width=True, key="btn_reset"):
-            keys_to_clear = [k for k in st.session_state.keys() if 'upload' in k or 'file' in k or 'processed' in k]
+        if st.button("🔄 Reset", use_container_width=True, key="btn_reset", help="Clear session and start fresh"):
+            keys_to_clear = [k for k in st.session_state.keys() if 'upload' in k or 'file' in k or 'processed' in k or 'load_sample' in k]
             for key in keys_to_clear:
-                del st.session_state[key]
+                if key in st.session_state:
+                    del st.session_state[key]
             st.success("✅ Session reset successfully!")
-            time.sleep(1)
+            time.sleep(0.8)
             st.rerun()
     
     st.markdown("---")
@@ -645,31 +1422,35 @@ with st.sidebar:
     
     with st.expander("🎯 Matching Parameters", expanded=True):
         tolerance = st.number_input("Tax/Taxable Tolerance (₹)", min_value=0, max_value=100000, value=20, step=1, 
-                                   help="Maximum allowed difference in taxable/tax values for matching")
+                                   help="Maximum allowed difference in taxable/tax values for matching", key="param_tolerance")
         date_tolerance = st.number_input("Date Tolerance (Days)", min_value=0, max_value=365, value=7, step=1, 
-                                        help="Maximum date difference for suggested matches")
+                                        help="Maximum date difference for suggested matches", key="param_date_tol")
         fuzzy_threshold = st.slider("Fuzzy Name Match Threshold (%)", min_value=70, max_value=100, value=85, step=5,
-                                   help="Similarity percentage for fuzzy supplier name matching")
+                                   help="Similarity percentage for fuzzy supplier name matching", key="param_fuzzy")
     
     with st.expander("📋 Processing Options"):
-        include_reverse_charge = st.checkbox("Include Reverse Charge", value=True)
-        auto_claim_itc = st.checkbox("Auto-claim ITC for Exact Matches", value=True)
-        fuzzy_doc_matching = st.checkbox("Enable Fuzzy Document Matching", value=True)
+        include_reverse_charge = st.checkbox("Include Reverse Charge", value=True, key="opt_reverse_charge")
+        auto_claim_itc = st.checkbox("Auto-claim ITC for Exact Matches", value=True, key="opt_auto_claim")
+        fuzzy_doc_matching = st.checkbox("Enable Fuzzy Document Matching", value=True, key="opt_fuzzy_doc")
         handle_cdn_negative = st.checkbox("Treat Credit Notes as Negative Values", value=True, 
-                                         help="Credit notes will have negative taxable/tax values for proper matching")
-        validate_gstin = st.checkbox("Validate GSTIN Format", value=True)
+                                         help="Credit notes will have negative taxable/tax values for proper matching",
+                                         key="opt_cdn_neg")
+        validate_gstin = st.checkbox("Validate GSTIN Format", value=True, key="opt_validate_gstin")
         strict_financial_year = st.checkbox("Strict Financial Year Matching", value=False,
-                                           help="Only match documents within same financial year")
+                                           help="Only match documents within same financial year",
+                                           key="opt_strict_fy")
     
     with st.expander("📤 Export Preferences"):
-        include_charts = st.checkbox("Include Charts in Report", value=True)
-        include_raw_data = st.checkbox("Include Raw Data Sheets", value=True)
-        max_rows = st.number_input("Max Excel Rows", min_value=1000, max_value=500000, value=50000, step=1000)
+        include_charts = st.checkbox("Include Charts in Report", value=True, key="exp_charts")
+        include_raw_data = st.checkbox("Include Raw Data Sheets", value=True, key="exp_raw")
+        max_rows = st.number_input("Max Excel Rows", min_value=1000, max_value=500000, value=50000, step=1000, key="exp_max_rows")
         add_dropdown_validation = st.checkbox("Add DOC_TYPE Dropdown in Excel", value=True,
-                                             help="Add data validation dropdown for DOC_TYPE column")
-        export_format = st.selectbox("Primary Export Format", ["Excel (.xlsx)", "CSV (.csv)", "Both"], index=0)
-        include_subtotals = st.checkbox("Include Subtotals in Export", value=True,
-                                       help="Add subtotal rows for each match status")
+                                             help="Add data validation dropdown for DOC_TYPE column",
+                                             key="exp_dropdown")
+        export_format = st.selectbox("Primary Export Format", ["Excel (.xlsx)", "CSV (.csv)", "Both"], index=0, key="exp_format")
+        include_subtotals = st.checkbox("Include Subtotals in Export", value=False,  # Changed to False as per requirement
+                                       help="Add subtotal rows for each match status",
+                                       key="exp_subtotals")
     
     st.markdown("---")
     with st.expander("❓ Help & Documentation"):
@@ -709,7 +1490,7 @@ with st.sidebar:
     st.markdown("### 🟢 System Status")
     
     health_status = "✅ All Systems Operational"
-    health_color = "#10b981"
+    health_color = var_success = "#10b981"
     
     try:
         pd_version = pd.__version__
@@ -721,21 +1502,21 @@ with st.sidebar:
         logger.warning(f"System health check failed: {e}")
     
     st.markdown(f"""
-    <div style="font-size: 0.9rem; color: #94a3b8;">
-        <div style="display: flex; justify-content: space-between; margin: 6px 0;">
-            <span>Engine:</span><span style="color: {health_color};">● {health_status}</span>
+    <div style="font-size: 0.9rem; color: var(--text-tertiary);">
+        <div style="display: flex; justify-content: space-between; margin: 8px 0; padding: 4px 0; border-bottom: 1px dashed var(--border-color);">
+            <span>Engine:</span><span style="color: {health_color}; font-weight: 600;">● {health_status}</span>
         </div>
-        <div style="display: flex; justify-content: space-between; margin: 6px 0;">
-            <span>Matching AI:</span><span style="color: #10b981;">● Active</span>
+        <div style="display: flex; justify-content: space-between; margin: 8px 0; padding: 4px 0; border-bottom: 1px dashed var(--border-color);">
+            <span>Matching AI:</span><span style="color: #10b981; font-weight: 600;">● Active</span>
         </div>
-        <div style="display: flex; justify-content: space-between; margin: 6px 0;">
-            <span>Export Service:</span><span style="color: #10b981;">● Ready</span>
+        <div style="display: flex; justify-content: space-between; margin: 8px 0; padding: 4px 0; border-bottom: 1px dashed var(--border-color);">
+            <span>Export Service:</span><span style="color: #10b981; font-weight: 600;">● Ready</span>
         </div>
-        <div style="display: flex; justify-content: space-between; margin: 6px 0;">
+        <div style="display: flex; justify-content: space-between; margin: 8px 0; padding: 4px 0;">
             <span>Pandas:</span><span>{pd_version}</span>
         </div>
-        <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.1);">
-            <small>Session ID: {hash(str(datetime.now())) % 10000:04d}</small>
+        <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-color);">
+            <small style="color: var(--text-muted);">Session: {hash(str(datetime.now())) % 10000:04d}</small>
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -749,6 +1530,7 @@ st.markdown("""
         Real-time Insights • Compliance-Ready Reports • Credit/Debit Note Support • 
         Enterprise-Grade Security & Performance • Professional Format Export
     </p>
+    <div class="badge">🚀 Enhanced Summary & Modern UI</div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -927,18 +1709,14 @@ def generate_file_hash(file_bytes: bytes) -> str:
 
 def get_status_css_class(status_value) -> str:
     """
-    ✅ Returns proper CSS property string for pandas Styler
+    Returns proper CSS property string for pandas Styler
     This fixes the ValueError: Styles supplied as string must follow CSS rule formats
-    
-    Returns CSS properties like: "color: red; background: blue;"
-    NOT class names like: "status-exact"
     """
     if pd.isna(status_value):
         return ''
     
     status_lower = str(status_value).lower().strip()
     
-    # ✅ Map each status to actual CSS properties (not class names!)
     css_map = {
         'exact': 'color: #065f46; background-color: rgba(16, 185, 129, 0.15); font-weight: 600;',
         'suggested': 'color: #0e7490; background-color: rgba(6, 182, 212, 0.15); font-weight: 600;',
@@ -946,11 +1724,29 @@ def get_status_css_class(status_value) -> str:
         'doc type mismatch': 'color: #7c3aed; background-color: rgba(139, 92, 246, 0.15); font-weight: 600;',
         'cross-state (pan match)': 'color: #4f46e5; background-color: rgba(99, 102, 241, 0.15); font-weight: 600;',
         'missing in gstr 2b': 'color: #991b1b; background-color: rgba(239, 68, 68, 0.15); font-weight: 600;',
-        'missing in pr': 'color: #5b21b6; background-color: rgba(139, 92, 246, 0.15); font-weight: 600;',
+        'missing in pr': 'color: #1e40af; background-color: rgba(59, 130, 246, 0.15); font-weight: 600;',
         'other': 'color: #64748b; background-color: rgba(100, 116, 139, 0.1); font-weight: 500;',
     }
     
     return css_map.get(status_lower, '')
+
+
+def format_currency(value: float) -> str:
+    """Format currency with Indian numbering system"""
+    if pd.isna(value):
+        return "₹0"
+    try:
+        val = float(value)
+        if abs(val) >= 10000000:
+            return f"₹{val/10000000:.2f} Cr"
+        elif abs(val) >= 100000:
+            return f"₹{val/100000:.2f} L"
+        elif abs(val) >= 1000:
+            return f"₹{val/1000:.2f} K"
+        else:
+            return f"₹{val:,.2f}"
+    except:
+        return f"₹{value}"
 
 
 # ==================== ENHANCED SAMPLE TEMPLATE GENERATORS ====================
@@ -1107,13 +1903,13 @@ st.markdown("""
 col_upload1, col_upload2, col_upload3 = st.columns([2, 2, 1])
 
 with col_upload1:
-    file_2b = st.file_uploader("📄 GSTR-2B File", type=['xlsx', 'xls'], key='upload_2b', label_visibility="collapsed")
+    file_2b = st.file_uploader("📄 GSTR-2B File", type=['xlsx', 'xls'], key='upload_2b', label_visibility="collapsed", help="Upload your GSTR-2B Excel file")
     if file_2b:
         st.success(f"✓ {file_2b.name}")
         st.session_state.file_2b_hash = generate_file_hash(file_2b.getvalue())
 
 with col_upload2:
-    file_pr = st.file_uploader("📘 Purchase Register", type=['xlsx', 'xls'], key='upload_pr', label_visibility="collapsed")
+    file_pr = st.file_uploader("📘 Purchase Register", type=['xlsx', 'xls'], key='upload_pr', label_visibility="collapsed", help="Upload your Purchase Register Excel file")
     if file_pr:
         st.success(f"✓ {file_pr.name}")
         st.session_state.file_pr_hash = generate_file_hash(file_pr.getvalue())
@@ -1128,7 +1924,8 @@ with col_upload3:
             file_name="GSTR2B_Sample_Template.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             use_container_width=True,
-            key="btn_download_2b_sample"
+            key="btn_download_2b_sample",
+            help="Download sample GSTR-2B template"
         )
     with col_d2:
         st.download_button(
@@ -1137,7 +1934,8 @@ with col_upload3:
             file_name="PurchaseRegister_Sample_Template.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             use_container_width=True,
-            key="btn_download_pr_sample"
+            key="btn_download_pr_sample",
+            help="Download sample Purchase Register template"
         )
 
 st.markdown("</div>", unsafe_allow_html=True)
@@ -1378,6 +2176,380 @@ def process_reconciliation(
         logger.error(f"Reconciliation failed: {str(e)}", exc_info=True)
         raise
 
+# ==================== ENHANCED EXCEL EXPORT FUNCTION ====================
+def create_enhanced_excel_export(
+    merged_df: pd.DataFrame,
+    df_2b: pd.DataFrame,
+    df_pr: pd.DataFrame,
+    stats: Dict,
+    include_charts: bool = True,
+    include_raw_data: bool = True,
+    add_dropdown: bool = True,
+    include_subtotals: bool = False  # REMOVED as per requirement
+) -> bytes:
+    """
+    Create enhanced Excel export with:
+    - NO subtotal formulas in Reconciliation sheet
+    - Enhanced Summary sheet with match status details, charts, top 10 parties
+    - Hyperlinks from Summary to Reconciliation sheet
+    - Formulas for invoice counts by match status
+    """
+    output = io.BytesIO()
+    
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        workbook = writer.book
+        
+        # Define formats
+        header_format = workbook.add_format({
+            'bold': True, 'bg_color': '#1e40af', 'font_color': 'white', 
+            'border': 1, 'align': 'center', 'valign': 'vcenter', 'text_wrap': True,
+            'font_size': 10
+        })
+        
+        number_format = workbook.add_format({
+            'num_format': '#,##0.00', 'border': 1, 'align': 'right'
+        })
+        
+        text_format = workbook.add_format({
+            'border': 1, 'align': 'left', 'valign': 'top'
+        })
+        
+        link_format = workbook.add_format({
+            'font_color': 'blue', 'underline': 1, 'border': 1
+        })
+        
+        status_formats = {
+            'Exact': workbook.add_format({'bg_color': '#d1fae5', 'font_color': '#065f46', 'border': 1, 'font_weight': 'bold'}),
+            'Suggested': workbook.add_format({'bg_color': '#cffafe', 'font_color': '#0e7490', 'border': 1, 'font_weight': 'bold'}),
+            'Value Mismatch': workbook.add_format({'bg_color': '#fef3c7', 'font_color': '#92400e', 'border': 1, 'font_weight': 'bold'}),
+            'Doc Type Mismatch': workbook.add_format({'bg_color': '#ede9fe', 'font_color': '#7c3aed', 'border': 1, 'font_weight': 'bold'}),
+            'Cross-State (PAN Match)': workbook.add_format({'bg_color': '#e0e7ff', 'font_color': '#4f46e5', 'border': 1, 'font_weight': 'bold'}),
+            'Missing in GSTR 2B': workbook.add_format({'bg_color': '#fee2e2', 'font_color': '#991b1b', 'border': 1, 'font_weight': 'bold'}),
+            'Missing in PR': workbook.add_format({'bg_color': '#dbeafe', 'font_color': '#1e40af', 'border': 1, 'font_weight': 'bold'}),
+        }
+        
+        title_format = workbook.add_format({
+            'bold': True, 'font_size': 14, 'bg_color': '#f1f5f9', 'border': 1, 'align': 'center'
+        })
+        
+        # ==================== RECONCILIATION SHEET ====================
+        # Prepare reconciliation data - NO SUBTOTALS as per requirement
+        recon_df = merged_df[[
+            'MATCH_STATUS', 'MATCH_REASON', 'SUPPLIER_NAME_COMBINED', 
+            'SUPPLIER_GSTIN_2B', 'SUPPLIER_GSTIN_PR', 'MY_GSTIN_2B', 'MY_GSTIN_PR',
+            'DOC_NUMBER_2B', 'DOC_NUMBER_PR', 'DOC_DATE_2B', 'DOC_DATE_PR',
+            'TOTAL_DOC_VALUE_2B', 'TOTAL_DOC_VALUE_PR',
+            'TAXABLE_VALUE_2B', 'TAXABLE_VALUE_PR',
+            'TAXABLE_DIFF', 'TOTAL_TAX_2B', 'TOTAL_TAX_PR',
+            'IGST_2B', 'IGST_PR', 'CGST_2B', 'CGST_PR', 'SGST_2B', 'SGST_PR',
+            'CESS_2B', 'CESS_PR',
+            'DOC_TYPE_2B', 'DOC_TYPE_PR',
+            'SECTION_NAME_2B', 'SECTION_NAME_PR',
+            'ITC_ELIGIBILITY'
+        ]].copy()
+        
+        recon_df.columns = [
+            'Match Status', 'Match Reason', 'Supplier Name',
+            'Supplier GSTIN (2B)', 'Supplier GSTIN (PR)', 'My GSTIN (2B)', 'My GSTIN (PR)',
+            'Document Number (2B)', 'Document Number (PR)', 'Document Date (2B)', 'Document Date (PR)',
+            'Total Value (2B)', 'Total Value (PR)',
+            'Taxable (2B)', 'Taxable (PR)',
+            'Taxable Diff', 'Total Tax (2B)', 'Total Tax (PR)',
+            'IGST (2B)', 'IGST (PR)', 'CGST (2B)', 'CGST (PR)', 'SGST (2B)', 'SGST (PR)',
+            'CESS (2B)', 'CESS (PR)',
+            'Doc Type (2B)', 'Doc Type (PR)',
+            'Section (2B)', 'Section (PR)',
+            'ITC Eligibility'
+        ]
+        
+        # Write reconciliation data starting from row 3 (leave space for header)
+        start_row = 3
+        recon_df.to_excel(writer, sheet_name='Reconciliation', index=False, startrow=start_row)
+        
+        worksheet = writer.sheets['Reconciliation']
+        
+        # Write main header
+        worksheet.merge_range(0, 0, 0, len(recon_df.columns)-1, 'GST Reconciliation Report', title_format)
+        worksheet.write(1, 0, f'Generated: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}', text_format)
+        worksheet.write(2, 0, f'Total Records: {len(recon_df)}', text_format)
+        
+        # Write column headers
+        for col_num, col_name in enumerate(recon_df.columns):
+            worksheet.write(start_row, col_num, col_name, header_format)
+        
+        # Apply formatting to data rows
+        for row_num in range(start_row + 1, len(recon_df) + start_row + 1):
+            # Apply status-based formatting
+            status = recon_df.iloc[row_num - start_row - 1]['Match Status']
+            if status in status_formats:
+                for col in range(len(recon_df.columns)):
+                    worksheet.set_row(row_num - 1, None, status_formats[status])
+            
+            # Apply number formatting to value columns (indices 12-25)
+            for col_num in range(12, 26):
+                if col_num < len(recon_df.columns):
+                    try:
+                        val = recon_df.iloc[row_num - start_row - 1, col_num]
+                        if pd.notna(val) and isinstance(val, (int, float)):
+                            worksheet.write_number(row_num, col_num, val, number_format)
+                    except (ValueError, TypeError, IndexError):
+                        pass
+        
+        # Add DOC_TYPE dropdown validation if enabled
+        if add_dropdown:
+            # Find column indices for Doc Type columns
+            doc_type_2b_col = None
+            doc_type_pr_col = None
+            for idx, col in enumerate(recon_df.columns):
+                if col == 'Doc Type (2B)':
+                    doc_type_2b_col = idx
+                elif col == 'Doc Type (PR)':
+                    doc_type_pr_col = idx
+            
+            if doc_type_2b_col is not None:
+                worksheet.data_validation(start_row + 1, doc_type_2b_col, start_row + len(recon_df), doc_type_2b_col, 
+                                        {'validate': 'list', 'source': ['INVOICE', 'CREDIT', 'DEBIT']})
+            if doc_type_pr_col is not None:
+                worksheet.data_validation(start_row + 1, doc_type_pr_col, start_row + len(recon_df), doc_type_pr_col, 
+                                        {'validate': 'list', 'source': ['INVOICE', 'CREDIT', 'DEBIT']})
+        
+        # Set column widths
+        col_widths = [18, 45, 35, 20, 20, 20, 20, 22, 22, 14, 14, 18, 18, 16, 16, 14, 16, 16, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 18]
+        for idx, width in enumerate(col_widths):
+            if idx < len(recon_df.columns):
+                worksheet.set_column(idx, idx, width)
+        
+        # Freeze panes
+        worksheet.freeze_panes(start_row + 1, 0)
+        
+        # ==================== ENHANCED SUMMARY SHEET ====================
+        summary_ws = workbook.add_worksheet('Summary')
+        
+        # Summary Header
+        summary_ws.merge_range('A1:F1', '📊 GST Reconciliation Summary Dashboard', title_format)
+        summary_ws.write('A2', f'Report Generated: {datetime.now().strftime("%d-%b-%Y %I:%M %p")}', text_format)
+        summary_ws.write('A3', f'Processing Time: {stats.get("processing_time_sec", 0):.2f} seconds', text_format)
+        
+        row_idx = 5
+        
+        # Key Metrics Section
+        summary_ws.merge_range(f'A{row_idx}:C{row_idx}', '🔑 Key Metrics', header_format)
+        row_idx += 1
+        
+        metrics = [
+            ('Total Records Processed', stats.get('merged_records', 0)),
+            ('Exact Matches', stats.get('exact_matches', 0)),
+            ('Suggested Matches', stats.get('suggested_matches', 0)),
+            ('Value Mismatches', stats.get('value_mismatches', 0)),
+            ('Missing in GSTR-2B', stats.get('missing_in_2b', 0)),
+            ('Missing in PR', stats.get('missing_in_pr', 0)),
+        ]
+        
+        for label, value in metrics:
+            summary_ws.write(f'A{row_idx}', label, text_format)
+            summary_ws.write(f'C{row_idx}', value, number_format)
+            row_idx += 1
+        
+        # Match Status Breakdown with Formulas & Links
+        summary_ws.merge_range(f'A{row_idx}:F{row_idx}', '📋 Match Status Details (Click to View in Reconciliation Sheet)', header_format)
+        row_idx += 1
+        
+        # Status headers
+        headers = ['Status', 'Count', 'Formula', 'Taxable Value (2B)', 'Taxable Value (PR)', 'Quick Link']
+        for col, header in enumerate(headers):
+            summary_ws.write(row_idx, col, header, header_format)
+        row_idx += 1
+        
+        # Calculate status breakdowns
+        status_breakdown = merged_df['MATCH_STATUS'].value_counts()
+        status_values = {}
+        
+        for status in ['Exact', 'Suggested', 'Value Mismatch', 'Doc Type Mismatch', 'Cross-State (PAN Match)', 'Missing in GSTR 2B', 'Missing in PR']:
+            mask = merged_df['MATCH_STATUS'] == status
+            count = mask.sum()
+            taxable_2b = merged_df.loc[mask, 'TAXABLE_VALUE_2B'].sum()
+            taxable_pr = merged_df.loc[mask, 'TAXABLE_VALUE_PR'].sum()
+            status_values[status] = {'count': count, 'taxable_2b': taxable_2b, 'taxable_pr': taxable_pr}
+            
+            # Write status row
+            summary_ws.write(row_idx, 0, status, text_format)
+            summary_ws.write(row_idx, 1, count, number_format)
+            
+            # Add Excel formula for count (referencing Reconciliation sheet)
+            # Formula: =COUNTIF(Reconciliation!A:A, "Status")
+            summary_ws.write_formula(row_idx, 2, f'=COUNTIF(Reconciliation!A:A, "{status}")', number_format)
+            
+            summary_ws.write(row_idx, 3, taxable_2b, number_format)
+            summary_ws.write(row_idx, 4, taxable_pr, number_format)
+            
+            # Add hyperlink to filter by status in Reconciliation sheet
+            # Note: Excel hyperlinks to filtered views require named ranges or VBA
+            # We'll add a note instead
+            summary_ws.write(row_idx, 5, f'Filter: {status}', link_format)
+            
+            row_idx += 1
+        
+        # Document Type Breakdown
+        summary_ws.merge_range(f'A{row_idx}:E{row_idx}', '📑 Document Type Analysis', header_format)
+        row_idx += 1
+        
+        dt_headers = ['Doc Type', 'Count (2B)', 'Taxable (2B)', 'Count (PR)', 'Taxable (PR)']
+        for col, header in enumerate(dt_headers):
+            summary_ws.write(row_idx, col, header, header_format)
+        row_idx += 1
+        
+        for doc_type in ['INVOICE', 'CREDIT', 'DEBIT']:
+            count_2b = (df_2b['DOC_TYPE'] == doc_type).sum()
+            taxable_2b = df_2b.loc[df_2b['DOC_TYPE'] == doc_type, 'TAXABLE_VALUE'].sum()
+            count_pr = (df_pr['DOC_TYPE'] == doc_type).sum()
+            taxable_pr = df_pr.loc[df_pr['DOC_TYPE'] == doc_type, 'TAXABLE_VALUE'].sum()
+            
+            summary_ws.write(row_idx, 0, doc_type, text_format)
+            summary_ws.write(row_idx, 1, count_2b, number_format)
+            summary_ws.write(row_idx, 2, taxable_2b, number_format)
+            summary_ws.write(row_idx, 3, count_pr, number_format)
+            summary_ws.write(row_idx, 4, taxable_pr, number_format)
+            row_idx += 1
+        
+        # Top 10 Parties from GSTR-2B
+        summary_ws.merge_range(f'A{row_idx}:D{row_idx}', '🏆 Top 10 Suppliers by Taxable Value (GSTR-2B)', header_format)
+        row_idx += 1
+        
+        # Calculate top 10 parties from 2B
+        top_10_2b = df_2b.groupby('SUPPLIER_NAME')['TAXABLE_VALUE'].sum().nlargest(10).reset_index()
+        top_10_2b.columns = ['Supplier Name', 'Total Taxable Value']
+        
+        summary_ws.write(row_idx, 0, 'Rank', header_format)
+        summary_ws.write(row_idx, 1, 'Supplier Name', header_format)
+        summary_ws.write(row_idx, 2, 'Total Taxable (₹)', header_format)
+        summary_ws.write(row_idx, 3, 'Link', header_format)
+        row_idx += 1
+        
+        for rank, (_, row) in enumerate(top_10_2b.iterrows(), 1):
+            summary_ws.write(row_idx, 0, rank, number_format)
+            summary_ws.write(row_idx, 1, row['Supplier Name'], text_format)
+            summary_ws.write(row_idx, 2, row['Total Taxable Value'], number_format)
+            # Add hyperlink to search for supplier in Reconciliation sheet
+            summary_ws.write_url(row_idx, 3, f"internal:'Reconciliation'!A1", string='View Records', format=link_format)
+            row_idx += 1
+        
+        row_idx += 2
+        
+        # Top 10 Parties from Purchase Register
+        summary_ws.merge_range(f'A{row_idx}:D{row_idx}', '🏆 Top 10 Suppliers by Taxable Value (Purchase Register)', header_format)
+        row_idx += 1
+        
+        # Calculate top 10 parties from PR
+        top_10_pr = df_pr.groupby('SUPPLIER_NAME')['TAXABLE_VALUE'].sum().nlargest(10).reset_index()
+        top_10_pr.columns = ['Supplier Name', 'Total Taxable Value']
+        
+        summary_ws.write(row_idx, 0, 'Rank', header_format)
+        summary_ws.write(row_idx, 1, 'Supplier Name', header_format)
+        summary_ws.write(row_idx, 2, 'Total Taxable (₹)', header_format)
+        summary_ws.write(row_idx, 3, 'Link', header_format)
+        row_idx += 1
+        
+        for rank, (_, row) in enumerate(top_10_pr.iterrows(), 1):
+            summary_ws.write(row_idx, 0, rank, number_format)
+            summary_ws.write(row_idx, 1, row['Supplier Name'], text_format)
+            summary_ws.write(row_idx, 2, row['Total Taxable Value'], number_format)
+            summary_ws.write_url(row_idx, 3, f"internal:'Reconciliation'!A1", string='View Records', format=link_format)
+            row_idx += 1
+        
+        # Formulas Reference Section
+        row_idx += 2
+        summary_ws.merge_range(f'A{row_idx}:C{row_idx}', '📐 Formula Reference Guide', header_format)
+        row_idx += 1
+        
+        formulas = [
+            ('Exact Match Count', '=COUNTIF(Reconciliation!A:A, "Exact")', 'Counts records with exact match status'),
+            ('Suggested Match Count', '=COUNTIF(Reconciliation!A:A, "Suggested")', 'Counts records needing review'),
+            ('Missing in 2B Count', '=COUNTIF(Reconciliation!A:A, "Missing in GSTR 2B")', 'Records in PR but not in 2B'),
+            ('Missing in PR Count', '=COUNTIF(Reconciliation!A:A, "Missing in PR")', 'Records in 2B but not in PR'),
+            ('Match Rate %', '=(B7+B8)/B6*100', 'Percentage of matched records'),
+            ('Total Taxable (2B)', '=SUM(Reconciliation!O:O)', 'Sum of taxable values from GSTR-2B'),
+            ('Total Taxable (PR)', '=SUM(Reconciliation!P:P)', 'Sum of taxable values from Purchase Register'),
+        ]
+        
+        for formula_name, formula, description in formulas:
+            summary_ws.write(row_idx, 0, formula_name, text_format)
+            summary_ws.write(row_idx, 1, formula, text_format)
+            summary_ws.write(row_idx, 2, description, text_format)
+            row_idx += 1
+        
+        # Set column widths for Summary sheet
+        summary_ws.set_column('A:A', 35)
+        summary_ws.set_column('B:B', 15)
+        summary_ws.set_column('C:C', 45)
+        summary_ws.set_column('D:D', 20)
+        summary_ws.set_column('E:E', 20)
+        summary_ws.set_column('F:F', 15)
+        
+        # ==================== CHARTS SHEET (if enabled) ====================
+        if include_charts:
+            charts_ws = workbook.add_worksheet('Charts')
+            charts_ws.write('A1', '📈 Visual Analytics', title_format)
+            
+            # Create a simple bar chart data for match status
+            chart_data = []
+            for status in ['Exact', 'Suggested', 'Value Mismatch', 'Missing in GSTR 2B', 'Missing in PR']:
+                chart_data.append([status, status_values.get(status, {}).get('count', 0)])
+            
+            # Write chart data
+            charts_ws.write('A3', 'Match Status', header_format)
+            charts_ws.write('B3', 'Count', header_format)
+            
+            for idx, (status, count) in enumerate(chart_data, start=4):
+                charts_ws.write(f'A{idx}', status, text_format)
+                charts_ws.write(f'B{idx}', count, number_format)
+            
+            # Create chart
+            chart = workbook.add_chart({'type': 'column'})
+            chart.add_series({
+                'name': 'Match Status Distribution',
+                'categories': '=Charts!$A$4:$A$8',
+                'values': '=Charts!$B$4:$B$8',
+                'data_labels': {'value': True},
+            })
+            chart.set_title({'name': 'Reconciliation Status Distribution'})
+            chart.set_x_axis({'name': 'Match Status'})
+            chart.set_y_axis({'name': 'Number of Records'})
+            charts_ws.insert_chart('D3', chart, {'x_scale': 1.5, 'y_scale': 1.5})
+            
+            # Top 10 Parties Chart
+            charts_ws.write('A20', 'Top 10 Suppliers (GSTR-2B)', header_format)
+            
+            # Write top 10 data for chart
+            for idx, (_, row) in enumerate(top_10_2b.head(10).iterrows(), start=21):
+                charts_ws.write(f'A{idx}', row['Supplier Name'][:30], text_format)  # Truncate long names
+                charts_ws.write(f'B{idx}', row['Total Taxable Value'], number_format)
+            
+            chart2 = workbook.add_chart({'type': 'bar'})
+            chart2.add_series({
+                'name': 'Taxable Value',
+                'categories': '=Charts!$A$21:$A$30',
+                'values': '=Charts!$B$21:$B$30',
+                'data_labels': {'value': True, 'position': 'end'},
+            })
+            chart2.set_title({'name': 'Top 10 Suppliers by Taxable Value (GSTR-2B)'})
+            chart2.set_x_axis({'name': 'Taxable Value (₹)'})
+            chart2.set_y_axis({'name': 'Supplier'})
+            charts_ws.insert_chart('D20', chart2, {'x_scale': 1.5, 'y_scale': 1.5})
+        
+        # ==================== RAW DATA SHEETS (if enabled) ====================
+        if include_raw_data:
+            df_2b.to_excel(writer, sheet_name='Raw_GSTR2B', index=False)
+            df_pr.to_excel(writer, sheet_name='Raw_PurchaseRegister', index=False)
+            
+            # Format raw sheets
+            for sheet_name in ['Raw_GSTR2B', 'Raw_PurchaseRegister']:
+                ws = writer.sheets[sheet_name]
+                ws.set_column('A:Z', 15)
+                ws.freeze_panes(1, 0)
+    
+    return output.getvalue()
+
+
 # ==================== MAIN PROCESSING LOGIC ====================
 if file_2b and file_pr:
     try:
@@ -1434,17 +2606,19 @@ if file_2b and file_pr:
             with m1:
                 st.markdown(f"""
                 <div class="metric-card">
-                    <div class="metric-label">📋 Total Records</div>
+                    <span class="metric-icon">📋</span>
+                    <div class="metric-label">Total Records</div>
                     <div class="metric-value">{total_records:,}</div>
-                    <div class="metric-delta neutral">All documents</div>
+                    <div class="metric-subtitle">All documents processed</div>
                 </div>
                 """, unsafe_allow_html=True)
             with m2:
-                delta_class = 'positive' if match_rate >= 80 else 'negative'
-                delta_text = '↑ Excellent' if match_rate >= 90 else '↑ Good' if match_rate >= 80 else '↓ Review needed'
+                delta_class = 'positive' if match_rate >= 80 else 'warning' if match_rate >= 60 else 'negative'
+                delta_text = '✓ Excellent' if match_rate >= 90 else '✓ Good' if match_rate >= 80 else '⚠ Review'
                 st.markdown(f"""
                 <div class="metric-card">
-                    <div class="metric-label">✅ Match Rate</div>
+                    <span class="metric-icon">✅</span>
+                    <div class="metric-label">Match Rate</div>
                     <div class="metric-value">{match_rate:.1f}%</div>
                     <div class="metric-delta {delta_class}">{delta_text}</div>
                 </div>
@@ -1452,135 +2626,152 @@ if file_2b and file_pr:
             with m3:
                 st.markdown(f"""
                 <div class="metric-card">
-                    <div class="metric-label">🔍 Suggested</div>
+                    <span class="metric-icon">🔍</span>
+                    <div class="metric-label">Suggested</div>
                     <div class="metric-value">{suggested_count:,}</div>
-                    <div class="metric-delta neutral">Needs review</div>
+                    <div class="metric-subtitle">Needs manual review</div>
                 </div>
                 """, unsafe_allow_html=True)
             with m4:
                 st.markdown(f"""
                 <div class="metric-card">
-                    <div class="metric-label">💰 Unclaimed ITC</div>
-                    <div class="metric-value">₹{unclaimed_itc:,.0f}</div>
+                    <span class="metric-icon">💰</span>
+                    <div class="metric-label">Unclaimed ITC</div>
+                    <div class="metric-value">{format_currency(unclaimed_itc)}</div>
                     <div class="metric-delta positive">Cash flow opportunity</div>
                 </div>
                 """, unsafe_allow_html=True)
             with m5:
                 st.markdown(f"""
                 <div class="metric-card">
-                    <div class="metric-label">⚠️ Risk Claims</div>
-                    <div class="metric-value">₹{risky_claims:,.0f}</div>
+                    <span class="metric-icon">⚠️</span>
+                    <div class="metric-label">Risk Claims</div>
+                    <div class="metric-value">{format_currency(risky_claims)}</div>
                     <div class="metric-delta negative">Compliance risk</div>
                 </div>
                 """, unsafe_allow_html=True)
             
-            # ==================== DOC_TYPE BREAKDOWN SECTION ====================
+            # ==================== MATCH STATUS SUMMARY CARDS ====================
             st.markdown("""
             <div class="section-card animate-fade-in">
-                <h3><span class="icon">📑</span> Document Type Breakdown</h3>
+                <h3><span class="icon">📋</span> Match Status Breakdown</h3>
+                <p style="color: var(--text-secondary); margin-bottom: 20px;">
+                    Detailed breakdown of reconciliation results with direct links to filtered views.
+                </p>
             </div>
             """, unsafe_allow_html=True)
             
-            col_dt1, col_dt2, col_dt3 = st.columns(3)
-            with col_dt1:
-                st.markdown(f"""
-                <div style="background: rgba(16, 185, 129, 0.1); border-radius: 12px; padding: 18px; border-left: 4px solid #10b981;">
-                    <strong style="font-size: 1.1rem;">📄 INVOICES</strong>
-                    <div style="display: flex; justify-content: space-between; margin: 10px 0;">
-                        <span>2B Count:</span><strong>{doc_type_stats['INVOICE_2B_count']}</strong>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; margin: 10px 0;">
-                        <span>PR Count:</span><strong>{doc_type_stats['INVOICE_PR_count']}</strong>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; margin: 10px 0;">
-                        <span>2B Taxable:</span><strong>₹{doc_type_stats['INVOICE_2B_taxable']:,.0f}</strong>
-                    </div>
-                    <div style="display: flex; justify-content: space-between;">
-                        <span>PR Taxable:</span><strong>₹{doc_type_stats['INVOICE_PR_taxable']:,.0f}</strong>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-            with col_dt2:
-                st.markdown(f"""
-                <div style="background: rgba(239, 68, 68, 0.1); border-radius: 12px; padding: 18px; border-left: 4px solid #ef4444;">
-                    <strong style="font-size: 1.1rem;">📉 CREDIT NOTES</strong>
-                    <div style="display: flex; justify-content: space-between; margin: 10px 0;">
-                        <span>2B Count:</span><strong>{doc_type_stats['CREDIT_2B_count']}</strong>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; margin: 10px 0;">
-                        <span>PR Count:</span><strong>{doc_type_stats['CREDIT_PR_count']}</strong>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; margin: 10px 0;">
-                        <span>2B Taxable:</span><strong style="color: #ef4444;">₹{doc_type_stats['CREDIT_2B_taxable']:,.0f}</strong>
-                    </div>
-                    <div style="display: flex; justify-content: space-between;">
-                        <span>PR Taxable:</span><strong style="color: #ef4444;">₹{doc_type_stats['CREDIT_PR_taxable']:,.0f}</strong>
-                    </div>
-                    <small style="color: var(--text-secondary);">* Negative values shown</small>
-                </div>
-                """, unsafe_allow_html=True)
-            with col_dt3:
-                st.markdown(f"""
-                <div style="background: rgba(245, 158, 11, 0.1); border-radius: 12px; padding: 18px; border-left: 4px solid #f59e0b;">
-                    <strong style="font-size: 1.1rem;">📈 DEBIT NOTES</strong>
-                    <div style="display: flex; justify-content: space-between; margin: 10px 0;">
-                        <span>2B Count:</span><strong>{doc_type_stats['DEBIT_2B_count']}</strong>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; margin: 10px 0;">
-                        <span>PR Count:</span><strong>{doc_type_stats['DEBIT_PR_count']}</strong>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; margin: 10px 0;">
-                        <span>2B Taxable:</span><strong>₹{doc_type_stats['DEBIT_2B_taxable']:,.0f}</strong>
-                    </div>
-                    <div style="display: flex; justify-content: space-between;">
-                        <span>PR Taxable:</span><strong>₹{doc_type_stats['DEBIT_PR_taxable']:,.0f}</strong>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
+            # Create match status cards
+            status_cards = [
+                {
+                    'status': 'Exact',
+                    'count': exact_count,
+                    'desc': 'Perfect matches - GSTIN, Doc No, Type & Values identical',
+                    'color': 'exact',
+                    'icon': '✅',
+                    'link_text': 'View Exact Matches →'
+                },
+                {
+                    'status': 'Suggested',
+                    'count': suggested_count,
+                    'desc': 'Potential matches - Date differs within tolerance, values close',
+                    'color': 'suggested',
+                    'icon': '🔍',
+                    'link_text': 'Review Suggested →'
+                },
+                {
+                    'status': 'Value Mismatch',
+                    'count': int(status_counts.get('Value Mismatch', 0)),
+                    'desc': 'Same document but taxable/tax amounts differ beyond tolerance',
+                    'color': 'mismatch',
+                    'icon': '⚠️',
+                    'link_text': 'Check Mismatches →'
+                },
+                {
+                    'status': 'Missing in PR',
+                    'count': missing_pr,
+                    'desc': 'Present in GSTR-2B but not recorded in Purchase Register',
+                    'color': 'missing-pr',
+                    'icon': '📥',
+                    'link_text': 'Add to Books →'
+                },
+                {
+                    'status': 'Missing in GSTR 2B',
+                    'count': missing_2b,
+                    'desc': 'Claimed in books but not appearing in GSTR-2B',
+                    'color': 'missing-2b',
+                    'icon': '🔎',
+                    'link_text': 'Verify Claims →'
+                },
+            ]
             
-            # ==================== AI INSIGHTS ====================
+            cols = st.columns(len(status_cards))
+            for idx, card in enumerate(status_cards):
+                with cols[idx]:
+                    st.markdown(f"""
+                    <div class="match-status-card {card['color']}">
+                        <div class="status-header">
+                            <span class="status-name">{card['icon']} {card['status']}</span>
+                            <span class="status-count">{card['count']:,}</span>
+                        </div>
+                        <div class="status-details">{card['desc']}</div>
+                        <div class="status-link">🔗 {card['link_text']}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+            
+            # ==================== TOP 10 PARTIES SECTION ====================
             st.markdown("""
             <div class="section-card animate-fade-in">
-                <h3><span class="icon">🧠</span> AI-Powered Financial Insights</h3>
+                <h3><span class="icon">🏆</span> Top 10 Suppliers Analysis</h3>
             </div>
             """, unsafe_allow_html=True)
             
-            insights = []
-            if dup_pr_count > 0:
-                insights.append({'type': 'warning', 'icon': '⚠️', 'title': 'Data Quality Alert', 'message': f"Found **{dup_pr_count} duplicate entries** in Purchase Register. Review for data integrity."})
-            if missing_pr > 0:
-                insights.append({'type': 'success', 'icon': '💡', 'title': 'Cash Flow Opportunity', 'message': f"**₹{unclaimed_itc:,.2f}** in ITC available in GSTR-2B but not claimed in books. Consider claiming to improve cash flow."})
-            if missing_2b > 0:
-                insights.append({'type': 'error', 'icon': '🚨', 'title': 'Compliance Risk', 'message': f"**₹{risky_claims:,.2f}** claimed in books but missing from GSTR-2B. This may lead to ITC reversal notices."})
-            if match_rate < 80:
-                insights.append({'type': 'warning', 'icon': '🔄', 'title': 'Reconciliation Health', 'message': f"Match rate is **{match_rate:.1f}%**. Review document numbering conventions and date formats."})
-            elif match_rate >= 95:
-                insights.append({'type': 'success', 'icon': '✅', 'title': 'Excellent Health', 'message': f"Outstanding match rate of **{match_rate:.1f}%**! Your GST compliance is in excellent shape."})
-            if suggested_count > 0:
-                insights.append({'type': 'info', 'icon': '🕒', 'title': 'Date Mismatches', 'message': f"**{suggested_count} records** have date differences within tolerance. Review for accurate period reporting."})
-            if doc_type_stats['CREDIT_2B_count'] != doc_type_stats['CREDIT_PR_count']:
-                insights.append({'type': 'warning', 'icon': '📉', 'title': 'Credit Note Mismatch', 'message': f"Credit note counts differ: {doc_type_stats['CREDIT_2B_count']} in 2B vs {doc_type_stats['CREDIT_PR_count']} in PR. Verify all credit notes are properly recorded."})
-            if validate_gstin and (stats.get('invalid_gstins_2b', 0) > 0 or stats.get('invalid_gstins_pr', 0) > 0):
-                insights.append({'type': 'error', 'icon': '🔍', 'title': 'GSTIN Validation', 'message': "Invalid GSTIN formats detected. Ensure all GSTINs follow the 15-character format for accurate matching."})
-            if not insights:
-                insights.append({'type': 'success', 'icon': '🎉', 'title': 'All Clear', 'message': "No critical issues detected. Your GST reconciliation is healthy and compliant!"})
+            col_top1, col_top2 = st.columns(2)
             
-            for i, insight in enumerate(insights):
-                st.markdown(f"""
-                <div class="insight-card {insight['type']} animate-fade-in" style="animation-delay: {i*0.1}s">
-                    <div class="insight-title">{insight['icon']} {insight['title']}</div>
-                    <div class="insight-message">{insight['message']}</div>
-                </div>
-                """, unsafe_allow_html=True)
+            with col_top1:
+                st.markdown("#### 📊 Top 10 from GSTR-2B")
+                top_10_2b = df_2b.groupby('SUPPLIER_NAME')['TAXABLE_VALUE'].sum().nlargest(10).reset_index()
+                top_10_2b.columns = ['Supplier', 'Taxable Value']
+                
+                for idx, row in top_10_2b.iterrows():
+                    st.markdown(f"""
+                    <div class="party-card">
+                        <div class="party-info">
+                            <div class="party-name">#{idx+1} {row['Supplier'][:40]}{'...' if len(row['Supplier'])>40 else ''}</div>
+                        </div>
+                        <div class="party-stats">
+                            <div class="party-value">{format_currency(row['Taxable Value'])}</div>
+                            <div class="party-label">Taxable</div>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
             
-            # ==================== VISUALIZATIONS ====================
+            with col_top2:
+                st.markdown("#### 📊 Top 10 from Purchase Register")
+                top_10_pr = df_pr.groupby('SUPPLIER_NAME')['TAXABLE_VALUE'].sum().nlargest(10).reset_index()
+                top_10_pr.columns = ['Supplier', 'Taxable Value']
+                
+                for idx, row in top_10_pr.iterrows():
+                    st.markdown(f"""
+                    <div class="party-card">
+                        <div class="party-info">
+                            <div class="party-name">#{idx+1} {row['Supplier'][:40]}{'...' if len(row['Supplier'])>40 else ''}</div>
+                        </div>
+                        <div class="party-stats">
+                            <div class="party-value">{format_currency(row['Taxable Value'])}</div>
+                            <div class="party-label">Taxable</div>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+            
+            # ==================== CHARTS SECTION ====================
             st.markdown("""
             <div class="section-card animate-fade-in">
                 <h3><span class="icon">📈</span> Visual Analytics</h3>
             </div>
             """, unsafe_allow_html=True)
             
-            tab1, tab2, tab3, tab4 = st.tabs(["📊 Status", "📑 Doc Types", "📅 Trends", "🔍 Details"])
+            tab1, tab2, tab3, tab4 = st.tabs(["📊 Status", "📑 Doc Types", "🏆 Top Parties", "🔍 Details"])
             
             with tab1:
                 status_data = merged_df['MATCH_STATUS'].value_counts().reset_index()
@@ -1588,7 +2779,7 @@ if file_2b and file_pr:
                 color_map = {
                     'Exact': '#10b981', 'Suggested': '#06b6d4', 'Value Mismatch': '#f97316', 
                     'Doc Type Mismatch': '#8b5cf6', 'Cross-State (PAN Match)': '#6366f1', 
-                    'Missing in GSTR 2B': '#ef4444', 'Missing in PR': '#f59e0b', 'Other': '#64748b'
+                    'Missing in GSTR 2B': '#ef4444', 'Missing in PR': '#3b82f6', 'Other': '#64748b'
                 }
                 fig_status = px.pie(
                     status_data, values='Count', names='Status', 
@@ -1631,30 +2822,35 @@ if file_2b and file_pr:
                 st.plotly_chart(fig_dt, use_container_width=True)
             
             with tab3:
-                if 'MONTH_2B' in merged_df.columns:
-                    monthly = merged_df.groupby('MONTH_2B').agg({
-                        'TAXABLE_VALUE_2B': 'sum', 
-                        'TOTAL_TAX_2B': 'sum', 
-                        'TAXABLE_VALUE_PR': 'sum', 
-                        'TOTAL_TAX_PR': 'sum'
-                    }).reset_index().fillna(0)
-                    
-                    fig_monthly = go.Figure()
-                    fig_monthly.add_trace(go.Bar(
-                        x=monthly['MONTH_2B'], y=monthly['TAXABLE_VALUE_2B'], 
-                        name='Taxable (2B)', marker_color=px.colors.qualitative.Set1[0]
-                    ))
-                    fig_monthly.add_trace(go.Bar(
-                        x=monthly['MONTH_2B'], y=monthly['TAXABLE_VALUE_PR'], 
-                        name='Taxable (PR)', marker_color=px.colors.qualitative.Set1[1]
-                    ))
-                    fig_monthly.update_layout(
-                        barmode='group', title='Monthly Taxable Value Comparison', 
-                        plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', 
-                        height=450, legend=dict(orientation='h', y=-0.2), 
-                        xaxis_tickangle=-45, margin=dict(t=50, b=80, l=20, r=20)
+                col_chart1, col_chart2 = st.columns(2)
+                
+                with col_chart1:
+                    st.markdown("##### Top 10 Suppliers - GSTR-2B")
+                    fig_top2b = px.bar(
+                        top_10_2b.head(10), 
+                        x='Taxable Value', 
+                        y='Supplier',
+                        orientation='h',
+                        title='Top 10 by Taxable Value (2B)',
+                        color='Taxable Value',
+                        color_continuous_scale='Blues'
                     )
-                    st.plotly_chart(fig_monthly, use_container_width=True)
+                    fig_top2b.update_layout(height=400, margin=dict(t=40, b=40, l=20, r=20))
+                    st.plotly_chart(fig_top2b, use_container_width=True)
+                
+                with col_chart2:
+                    st.markdown("##### Top 10 Suppliers - Purchase Register")
+                    fig_toppr = px.bar(
+                        top_10_pr.head(10), 
+                        x='Taxable Value', 
+                        y='Supplier',
+                        orientation='h',
+                        title='Top 10 by Taxable Value (PR)',
+                        color='Taxable Value',
+                        color_continuous_scale='Greens'
+                    )
+                    fig_toppr.update_layout(height=400, margin=dict(t=40, b=40, l=20, r=20))
+                    st.plotly_chart(fig_toppr, use_container_width=True)
             
             with tab4:
                 col_f1, col_f2, col_f3 = st.columns(3)
@@ -1689,9 +2885,8 @@ if file_2b and file_pr:
                     'TAXABLE_VALUE_PR', 'TOTAL_TAX_2B', 'TOTAL_TAX_PR', 'ITC_ELIGIBILITY'
                 ]
                 
-                # ✅ FIXED: Use proper CSS property strings for pandas Styler
+                # Apply status styling
                 def apply_status_styling(val):
-                    """Returns CSS properties string for pandas Styler - NOT class names!"""
                     return get_status_css_class(val)
                 
                 # Format numeric columns and apply status styling
@@ -1704,174 +2899,91 @@ if file_2b and file_pr:
                 
                 st.dataframe(styled_df, use_container_width=True, hide_index=True)
             
+            # ==================== AI INSIGHTS ====================
+            st.markdown("""
+            <div class="section-card animate-fade-in">
+                <h3><span class="icon">🧠</span> AI-Powered Financial Insights</h3>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            insights = []
+            if dup_pr_count > 0:
+                insights.append({'type': 'warning', 'icon': '⚠️', 'title': 'Data Quality Alert', 'message': f"Found **{dup_pr_count} duplicate entries** in Purchase Register. Review for data integrity."})
+            if missing_pr > 0:
+                insights.append({'type': 'success', 'icon': '💡', 'title': 'Cash Flow Opportunity', 'message': f"**{format_currency(unclaimed_itc)}** in ITC available in GSTR-2B but not claimed in books. Consider claiming to improve cash flow."})
+            if missing_2b > 0:
+                insights.append({'type': 'error', 'icon': '🚨', 'title': 'Compliance Risk', 'message': f"**{format_currency(risky_claims)}** claimed in books but missing from GSTR-2B. This may lead to ITC reversal notices."})
+            if match_rate < 80:
+                insights.append({'type': 'warning', 'icon': '🔄', 'title': 'Reconciliation Health', 'message': f"Match rate is **{match_rate:.1f}%**. Review document numbering conventions and date formats."})
+            elif match_rate >= 95:
+                insights.append({'type': 'success', 'icon': '✅', 'title': 'Excellent Health', 'message': f"Outstanding match rate of **{match_rate:.1f}%**! Your GST compliance is in excellent shape."})
+            if suggested_count > 0:
+                insights.append({'type': 'info', 'icon': '🕒', 'title': 'Date Mismatches', 'message': f"**{suggested_count} records** have date differences within tolerance. Review for accurate period reporting."})
+            if doc_type_stats['CREDIT_2B_count'] != doc_type_stats['CREDIT_PR_count']:
+                insights.append({'type': 'warning', 'icon': '📉', 'title': 'Credit Note Mismatch', 'message': f"Credit note counts differ: {doc_type_stats['CREDIT_2B_count']} in 2B vs {doc_type_stats['CREDIT_PR_count']} in PR. Verify all credit notes are properly recorded."})
+            if validate_gstin and (stats.get('invalid_gstins_2b', 0) > 0 or stats.get('invalid_gstins_pr', 0) > 0):
+                insights.append({'type': 'error', 'icon': '🔍', 'title': 'GSTIN Validation', 'message': "Invalid GSTIN formats detected. Ensure all GSTINs follow the 15-character format for accurate matching."})
+            if not insights:
+                insights.append({'type': 'success', 'icon': '🎉', 'title': 'All Clear', 'message': "No critical issues detected. Your GST reconciliation is healthy and compliant!"})
+            
+            for i, insight in enumerate(insights):
+                st.markdown(f"""
+                <div class="insight-card {insight['type']} animate-fade-in" style="animation-delay: {i*0.1}s">
+                    <span class="insight-icon">{insight['icon']}</span>
+                    <div class="insight-content">
+                        <div class="insight-title">{insight['title']}</div>
+                        <div class="insight-message">{insight['message']}</div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+            
             # ==================== EXPORT SECTION ====================
             st.markdown("""
             <div class="section-card animate-fade-in">
-                <h3><span class="icon">📤</span> Export Reconciliation Report</h3>
+                <h3><span class="icon">📤</span> Export Enhanced Reconciliation Report</h3>
             </div>
             """, unsafe_allow_html=True)
             
             col_export1, col_export2 = st.columns([3, 1])
             with col_export1:
                 st.markdown("""
-                <div style="background: rgba(99, 102, 241, 0.05); border-radius: 12px; padding: 20px; border: 1px solid var(--border-light);">
-                    <strong>📋 Report Includes:</strong>
+                <div style="background: rgba(99, 102, 241, 0.05); border-radius: 12px; padding: 20px; border: 1px solid var(--border-color);">
+                    <strong>📋 Enhanced Report Includes:</strong>
                     <ul style="margin: 10px 0 0 20px; color: var(--text-secondary); line-height: 1.8;">
-                        <li>Executive Dashboard with interactive charts</li>
-                        <li>Detailed reconciliation with all 30+ columns</li>
-                        <li>Subtotals at top for each match status</li>
-                        <li>Credit/Debit Note handling with negative values</li>
-                        <li>Summary tables matching GST portal format</li>
-                        <li>Raw data sheets for audit trail</li>
-                        <li><strong>DOC_TYPE dropdown validation (INVOICE/CREDIT/DEBIT)</strong></li>
-                        <li>Month format: JANUARY-25, FEBRUARY-25, etc.</li>
-                        <li>Processing metadata and audit log</li>
+                        <li>✅ <strong>Reconciliation Sheet</strong> - All 30+ columns, NO subtotal formulas</li>
+                        <li>📊 <strong>Enhanced Summary Sheet</strong> with:</li>
+                        <ul style="margin-left: 20px;">
+                            <li>Match status breakdown with Excel formulas</li>
+                            <li>Hyperlinks from Summary to Reconciliation sheet</li>
+                            <li>Top 10 parties from 2B & PR with links</li>
+                            <li>Document type analysis</li>
+                            <li>Formula reference guide</li>
+                        </ul>
+                        <li>📈 <strong>Charts Sheet</strong> - Visual analytics (if enabled)</li>
+                        <li>📑 <strong>Raw Data Sheets</strong> - Complete audit trail</li>
+                        <li>🔽 <strong>DOC_TYPE dropdown validation</strong> (INVOICE/CREDIT/DEBIT)</li>
+                        <li>📅 Month format: JANUARY-25, FEBRUARY-25, etc.</li>
                     </ul>
                 </div>
                 """, unsafe_allow_html=True)
             with col_export2:
-                output = io.BytesIO()
-                with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                    # Prepare reconciliation sheet with all required columns
-                    recon_df = merged_df[[
-                        'MATCH_STATUS', 'MATCH_REASON', 'SUPPLIER_NAME_COMBINED', 
-                        'SUPPLIER_GSTIN_2B', 'SUPPLIER_GSTIN_PR', 'MY_GSTIN_2B', 'MY_GSTIN_PR',
-                        'DOC_NUMBER_2B', 'DOC_NUMBER_PR', 'DOC_DATE_2B', 'DOC_DATE_PR',
-                        'TOTAL_DOC_VALUE_2B', 'TOTAL_DOC_VALUE_PR',
-                        'TAXABLE_VALUE_2B', 'TAXABLE_VALUE_PR',
-                        'TAXABLE_DIFF', 'TOTAL_TAX_2B', 'TOTAL_TAX_PR',
-                        'IGST_2B', 'IGST_PR', 'CGST_2B', 'CGST_PR', 'SGST_2B', 'SGST_PR',
-                        'CESS_2B', 'CESS_PR',
-                        'DOC_TYPE_2B', 'DOC_TYPE_PR',
-                        'SECTION_NAME_2B', 'SECTION_NAME_PR'
-                    ]].copy()
-                    
-                    recon_df.columns = [
-                        'Match Status', 'Match Status Description', 'Supplier Name',
-                        'Supplier GSTIN (2B)', 'Supplier GSTIN (PR)', 'My GSTIN (2B)', 'My GSTIN (PR)',
-                        'Document Number (2B)', 'Document Number (PR)', 'Document Date (2B)', 'Document Date (PR)',
-                        'Total Document Value (2B)', 'Total Document Value (PR)',
-                        'Taxable Value (2B)', 'Taxable Value (PR)',
-                        'Tax Difference(2B-PR)', 'Total Tax (2B)', 'Total Tax (PR)',
-                        'IGST (2B)', 'IGST (PR)', 'CGST (2B)', 'CGST (PR)', 'SGST (2B)', 'SGST (PR)',
-                        'Cess (2B)', 'Cess (PR)',
-                        'Document Type(2B)', 'Document Type(PR)',
-                        'Section Name 2B', 'Section Name (Pr)'
-                    ]
-                    
-                    # Add subtotals at top if enabled
-                    if include_subtotals:
-                        # Create summary rows
-                        summary_rows = []
-                        for status in recon_df['Match Status'].unique():
-                            status_data = recon_df[recon_df['Match Status'] == status]
-                            summary_rows.append({
-                                'Match Status': f'SUBTOTAL - {status}',
-                                'Supplier Name': '',
-                                'Total Document Value (2B)': status_data['Total Document Value (2B)'].sum(),
-                                'Total Document Value (PR)': status_data['Total Document Value (PR)'].sum(),
-                                'Taxable Value (2B)': status_data['Taxable Value (2B)'].sum(),
-                                'Taxable Value (PR)': status_data['Taxable Value (PR)'].sum(),
-                                'Total Tax (2B)': status_data['Total Tax (2B)'].sum(),
-                                'Total Tax (PR)': status_data['Total Tax (PR)'].sum(),
-                            })
-                        
-                        # Convert to DataFrame and add to top
-                        summary_df = pd.DataFrame(summary_rows)
-                        recon_df = pd.concat([summary_df, recon_df], ignore_index=True)
-                    
-                    # Write to Excel starting from row 2 (for header)
-                    recon_df.to_excel(writer, sheet_name='Reconciliation', index=False, startrow=2)
-                    
-                    workbook = writer.book
-                    worksheet = writer.sheets['Reconciliation']
-                    
-                    # Add header format
-                    header_format = workbook.add_format({
-                        'bold': True, 'bg_color': '#1e40af', 'font_color': 'white', 
-                        'border': 1, 'align': 'center', 'valign': 'vcenter', 'text_wrap': True
-                    })
-                    
-                    # Add subtotal format
-                    subtotal_format = workbook.add_format({
-                        'bold': True, 'bg_color': '#dbeafe', 'font_color': '#1e40af',
-                        'border': 1, 'align': 'left', 'valign': 'vcenter'
-                    })
-                    
-                    # Add number format
-                    number_format = workbook.add_format({
-                        'num_format': '#,##0.00', 'border': 1
-                    })
-                    
-                    # Write headers
-                    for col_num, col_name in enumerate(recon_df.columns):
-                        worksheet.write(2, col_num, col_name, header_format)
-                    
-                    # ✅ FIXED: Track which rows are subtotals BEFORE writing
-                    # Create a list to track subtotal rows
-                    subtotal_row_indices = []
-                    for idx, row in recon_df.iterrows():
-                        if str(row['Match Status']).startswith('SUBTOTAL'):
-                            subtotal_row_indices.append(idx + 3)  # +3 because data starts at row 3 (0-indexed: row 2)
-                    
-                    # Apply formatting to data rows
-                    for row_num in range(3, len(recon_df) + 3):
-                        # Check if this is a subtotal row using our pre-calculated list
-                        if row_num in subtotal_row_indices:
-                            worksheet.set_row(row_num - 1, None, subtotal_format)
-                        else:
-                            # Apply number formatting to value columns
-                            for col_num in [11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25]:
-                                if col_num < len(recon_df.columns):
-                                    try:
-                                        val = recon_df.iloc[row_num - 3, col_num]
-                                        if pd.notna(val) and isinstance(val, (int, float)):
-                                            worksheet.write_number(row_num - 1, col_num, val, number_format)
-                                    except (ValueError, TypeError):
-                                        pass
-                    
-                    if add_dropdown_validation:
-                        worksheet.data_validation('J3:J100000', {'validate': 'list', 'source': ['INVOICE', 'CREDIT', 'DEBIT']})
-                        worksheet.data_validation('K3:K100000', {'validate': 'list', 'source': ['INVOICE', 'CREDIT', 'DEBIT']})
-                    
-                    # Set column widths
-                    worksheet.set_column('A:A', 20)  # Match Status
-                    worksheet.set_column('B:B', 50)  # Match Status Description
-                    worksheet.set_column('C:C', 35)  # Supplier Name
-                    worksheet.set_column('D:G', 20)  # GSTINs
-                    worksheet.set_column('H:I', 22)  # Doc Numbers
-                    worksheet.set_column('J:K', 16)  # Doc Dates
-                    worksheet.set_column('L:Q', 18)  # Values and Tax
-                    worksheet.set_column('R:AA', 14) # Tax breakdown and Doc Types
-                    
-                    # Add summary sheet
-                    summary_data = pd.DataFrame({
-                        'Metric': [
-                            'Total Records', 'Exact Matches', 'Suggested Matches', 
-                            'Value Mismatches', 'Missing in GSTR-2B', 'Missing in PR',
-                            'Match Rate (%)', 'Unclaimed ITC (₹)', 'Risk Claims (₹)',
-                            'Processing Time (sec)'
-                        ],
-                        'Value': [
-                            total_records, exact_count, suggested_count,
-                            stats.get('value_mismatches', 0), missing_2b, missing_pr,
-                            f"{match_rate:.2f}", f"{unclaimed_itc:,.2f}", f"{risky_claims:,.2f}",
-                            stats.get('processing_time_sec', 0)
-                        ]
-                    })
-                    summary_data.to_excel(writer, sheet_name='Summary', index=False)
-                    
-                    if include_raw_data:
-                        df_2b.to_excel(writer, sheet_name='Raw_GSTR2B', index=False)
-                        df_pr.to_excel(writer, sheet_name='Raw_PurchaseRegister', index=False)
+                # Generate enhanced Excel export
+                excel_output = create_enhanced_excel_export(
+                    merged_df, df_2b, df_pr, stats,
+                    include_charts=include_charts,
+                    include_raw_data=include_raw_data,
+                    add_dropdown=add_dropdown_validation,
+                    include_subtotals=False  # REMOVED as per requirement
+                )
                 
                 st.download_button(
-                    label="⚡ Download Excel Report", 
-                    data=output.getvalue(), 
-                    file_name=f"GST_Recon_Report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx", 
+                    label="⚡ Download Enhanced Excel Report", 
+                    data=excel_output, 
+                    file_name=f"GST_Recon_Enhanced_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx", 
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", 
                     use_container_width=True,
-                    key="btn_download_excel"
+                    key="btn_download_excel_enhanced",
+                    help="Download comprehensive report with enhanced summary & charts"
                 )
                 
                 if export_format in ["CSV (.csv)", "Both"]:
@@ -1886,7 +2998,7 @@ if file_2b and file_pr:
                         key="btn_download_csv"
                     )
             
-            st.success(f"✅ Ready! Processed {total_records:,} records in {stats['processing_time_sec']}s with professional format export including subtotals.")
+            st.success(f"✅ Ready! Processed {total_records:,} records in {stats['processing_time_sec']}s with enhanced export featuring detailed summary, charts, and top parties analysis.")
     
     except Exception as e:
         logger.error(f"Processing error: {str(e)}", exc_info=True)
@@ -1905,9 +3017,9 @@ if file_2b and file_pr:
 else:
     st.markdown("""
     <div class="section-card animate-fade-in" style="text-align: center; padding: 64px 44px;">
-        <div style="font-size: 4.5rem; margin-bottom: 24px;">🧾✨</div>
-        <h2 style="margin: 0 0 18px 0; font-size: 2rem;">Welcome to GST Recon Pro v6.0</h2>
-        <p style="color: var(--text-secondary); font-size: 1.15rem; max-width: 650px; margin: 0 auto 36px auto; line-height: 1.7;">
+        <div style="font-size: 4.5rem; margin-bottom: 24px; display: inline-flex; align-items: center; justify-content: center; width: 120px; height: 120px; background: linear-gradient(135deg, var(--primary), var(--secondary)); border-radius: var(--radius-xl); color: white; box-shadow: var(--shadow-2xl);">🧾✨</div>
+        <h2 style="margin: 0 0 18px 0; font-size: 2rem; font-weight: 700;">Welcome to GST Recon Pro v6.0</h2>
+        <p style="color: var(--text-secondary); font-size: 1.15rem; max-width: 700px; margin: 0 auto 36px auto; line-height: 1.7;">
             Upload your GSTR-2B and Purchase Register files to begin intelligent reconciliation. 
             Our AI-powered engine matches invoices, handles Credit/Debit Notes with negative values, 
             identifies discrepancies, and generates compliance-ready reports with enterprise-grade security.
@@ -1918,7 +3030,7 @@ else:
             <div class="quick-action-btn"><span class="icon">📉</span><span class="label">CDN Support</span></div>
             <div class="quick-action-btn"><span class="icon">📊</span><span class="label">Live Insights</span></div>
         </div>
-        <div style="margin-top: 44px; padding-top: 28px; border-top: 1px solid var(--border-light);">
+        <div style="margin-top: 44px; padding-top: 28px; border-top: 1px solid var(--border-color);">
             <p style="color: var(--text-secondary); font-size: 0.95rem; line-height: 1.6;">
                 <strong>💡 Pro Tips:</strong><br>
                 • Credit Notes should have <strong>negative taxable/tax values</strong> for proper matching<br>
@@ -1937,14 +3049,14 @@ st.markdown("""
     <div class="brand">🧾 GST Recon Pro v6.0</div>
     <div class="credits">Enterprise GST Reconciliation Engine</div>
     <div class="credits">Developed by <strong>ABHISHEK JAKKULA</strong> • jakkulaabhishek5@gmail.com</div>
-    <div class="version">v6.0.1 • Last Updated: May 2026</div>
+    <div class="version">v6.0.2 • Enhanced Summary & Modern UI • May 2026</div>
     <div style="margin-top: 24px; display: flex; justify-content: center; gap: 24px; flex-wrap: wrap;">
         <a href="#" style="color: var(--text-secondary); text-decoration: none; font-size: 0.95rem;">📚 Documentation</a>
         <a href="#" style="color: var(--text-secondary); text-decoration: none; font-size: 0.95rem;">🎥 Tutorials</a>
         <a href="#" style="color: var(--text-secondary); text-decoration: none; font-size: 0.95rem;">🔧 Support</a>
         <a href="#" style="color: var(--text-secondary); text-decoration: none; font-size: 0.95rem;">🐛 Report Bug</a>
     </div>
-    <div style="margin-top: 16px; font-size: 0.85rem; color: var(--text-secondary);">
+    <div style="margin-top: 16px; font-size: 0.85rem; color: var(--text-tertiary);">
         © 2026 Abhishek Jakkula. All rights reserved. | GST Recon Pro is a proprietary enterprise solution.
     </div>
 </div>
@@ -1954,15 +3066,23 @@ st.markdown("""
 st.markdown("""
 <script>
 document.addEventListener('keydown', function(e) {
+    // Ctrl+R: Reset session
     if (e.ctrlKey && e.key === 'r') {
         e.preventDefault();
         if (confirm('Reset session and clear all data?')) {
             window.location.reload();
         }
     }
+    // Ctrl+E: Trigger export (if available)
     if (e.ctrlKey && e.key === 'e') {
         e.preventDefault();
-        const exportBtn = document.querySelector('button[kind="secondary"]');
+        const exportBtn = document.querySelector('button[title*="Download"]');
+        if (exportBtn) exportBtn.click();
+    }
+    // Ctrl+S: Save/Export
+    if (e.ctrlKey && e.key === 's') {
+        e.preventDefault();
+        const exportBtn = document.querySelector('button[kind="primary"]');
         if (exportBtn) exportBtn.click();
     }
 });
