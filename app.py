@@ -3,7 +3,7 @@
 # ============================================================================
 # Author: Abhishek Jakkula
 # Email: jakkulaabhishek5@gmail.com
-# Version: 6.0.3 (Error-Free • Enhanced UI • Modern Design)
+# Version: 6.0.4 (Fixed write_url Error • Enhanced Visibility)
 # Last Updated: May 2026
 # License: Proprietary - Enterprise Edition
 # ============================================================================
@@ -59,13 +59,13 @@ st.set_page_config(
     }
 )
 
-# ==================== ULTRA-MODERN HIGH-VISIBILITY CSS ====================
+# ==================== HIGH-VISIBILITY CSS (FIXED) ====================
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 
     :root {
-        /* High-Visibility Color Palette - Light Theme */
+        /* Light Theme - High Contrast */
         --primary: #4f46e5;
         --primary-hover: #4338ca;
         --primary-light: #e0e7ff;
@@ -97,11 +97,11 @@ st.markdown("""
         --info-text: #1e40af;
         
         /* Background & Text - High Contrast */
-        --bg-primary: #f1f5f9;
+        --bg-primary: #f8fafc;
         --bg-secondary: #ffffff;
         --bg-tertiary: #e2e8f0;
         --bg-card: #ffffff;
-        --bg-hover: #f8fafc;
+        --bg-hover: #f1f5f9;
         --bg-selected: #e0e7ff;
         
         --text-primary: #0f172a;
@@ -114,7 +114,7 @@ st.markdown("""
         --border-hover: #94a3b8;
         --border-focus: var(--primary);
         
-        /* Shadows - Enhanced Depth */
+        /* Shadows */
         --shadow-xs: 0 1px 2px 0 rgb(15 23 42 / 0.05);
         --shadow-sm: 0 1px 3px 0 rgb(15 23 42 / 0.1), 0 1px 2px -1px rgb(15 23 42 / 0.1);
         --shadow-md: 0 4px 6px -1px rgb(15 23 42 / 0.1), 0 2px 4px -2px rgb(15 23 42 / 0.1);
@@ -141,7 +141,7 @@ st.markdown("""
     }
 
     [data-theme="dark"] {
-        /* High-Visibility Color Palette - Dark Theme */
+        /* Dark Theme - High Contrast */
         --bg-primary: #0f172a;
         --bg-secondary: #1e293b;
         --bg-tertiary: #334155;
@@ -171,7 +171,7 @@ st.markdown("""
         --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.4), 0 8px 10px -6px rgb(0 0 0 / 0.4);
     }
 
-    /* Base Styles - High Readability */
+    /* Base Styles */
     * { box-sizing: border-box; }
     
     html, body, [class*="css"] {
@@ -197,7 +197,7 @@ st.markdown("""
         background: transparent !important;
     }
 
-    /* Sidebar - High Contrast */
+    /* Sidebar */
     [data-testid="stSidebar"] {
         background: linear-gradient(180deg, var(--bg-secondary) 0%, var(--bg-tertiary) 100%);
         border-right: 2px solid var(--border-color);
@@ -214,7 +214,7 @@ st.markdown("""
         font-weight: 700;
     }
 
-    /* Main Header - High Visibility */
+    /* Main Header */
     .main-header {
         text-align: center;
         padding: 2.5rem 2rem;
@@ -282,7 +282,7 @@ st.markdown("""
         border: 1px solid rgba(255, 255, 255, 0.3);
     }
 
-    /* Metric Cards - High Contrast */
+    /* Metric Cards */
     .metric-card {
         background: var(--bg-card);
         border-radius: var(--radius-lg);
@@ -376,7 +376,7 @@ st.markdown("""
         border: 1px solid var(--warning);
     }
 
-    /* Section Cards - Clear Hierarchy */
+    /* Section Cards */
     .section-card {
         background: var(--bg-card);
         border-radius: var(--radius-lg);
@@ -417,7 +417,7 @@ st.markdown("""
         font-weight: 700;
     }
 
-    /* Modern Buttons - High Visibility */
+    /* Buttons */
     .stButton>button {
         background: linear-gradient(135deg, var(--primary), var(--primary-hover));
         color: white !important;
@@ -459,7 +459,7 @@ st.markdown("""
         transform: translateY(0);
     }
 
-    /* DataFrames - High Readability */
+    /* DataFrames */
     [data-testid="stDataFrame"] {
         border-radius: var(--radius-lg);
         overflow: hidden;
@@ -496,7 +496,7 @@ st.markdown("""
         border-bottom: none;
     }
 
-    /* Status Badges - Clear Visual Hierarchy */
+    /* Status Badges */
     .status-badge {
         display: inline-flex;
         align-items: center;
@@ -537,7 +537,7 @@ st.markdown("""
         border-color: var(--info);
     }
 
-    /* Tabs - High Contrast */
+    /* Tabs */
     .stTabs [data-baseweb="tab-list"] {
         gap: 6px;
         background: var(--bg-tertiary);
@@ -570,7 +570,7 @@ st.markdown("""
         border-color: transparent !important;
     }
 
-    /* Insight Cards - Clear Messaging */
+    /* Insight Cards */
     .insight-card {
         background: var(--bg-card);
         border-radius: var(--radius-lg);
@@ -794,7 +794,7 @@ st.markdown("""
         color: var(--primary-text);
     }
 
-    /* Footer - Clear Branding */
+    /* Footer */
     .footer {
         text-align: center;
         padding: 36px 24px;
@@ -1047,7 +1047,7 @@ st.markdown("""
         to { transform: translateX(0); opacity: 1; }
     }
 
-    /* Form Elements - High Visibility */
+    /* Form Elements */
     .stTextInput > div > div > input,
     .stNumberInput > div > div > input,
     .stSelectbox > div > div > div {
@@ -1271,13 +1271,13 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# ==================== SIDEBAR - HIGH VISIBILITY ====================
+# ==================== SIDEBAR ====================
 with st.sidebar:
     st.markdown("""
     <div style="text-align: center; padding: 24px 0; border-bottom: 2px solid var(--border-color); margin-bottom: 20px;">
         <div style="font-size: 3rem; margin-bottom: 6px; display: inline-flex; align-items: center; justify-content: center; width: 72px; height: 72px; background: linear-gradient(135deg, var(--primary), var(--secondary)); border-radius: var(--radius-lg); color: white; box-shadow: var(--shadow-lg); font-weight: 700;">🧾</div>
         <h3 style="margin: 12px 0 3px 0; color: var(--text-primary); font-size: 1.4rem; font-weight: 800;">GST Recon Pro</h3>
-        <p style="margin: 0; color: var(--text-tertiary); font-size: 0.9rem; font-weight: 500;">v6.0.3 • Enterprise</p>
+        <p style="margin: 0; color: var(--text-tertiary); font-size: 0.9rem; font-weight: 500;">v6.0.4 • Enterprise</p>
         <div style="margin-top: 10px;">
             <span style="display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; background: var(--success-light); color: var(--success-text); border-radius: var(--radius-full); font-size: 0.75rem; font-weight: 700; border: 1px solid var(--success);">✅ Ready</span>
         </div>
@@ -2024,7 +2024,7 @@ def process_reconciliation(
         logger.error(f"Reconciliation failed: {str(e)}", exc_info=True)
         raise
 
-# ==================== ENHANCED EXCEL EXPORT (ERROR-FREE) ====================
+# ==================== ENHANCED EXCEL EXPORT (FIXED write_url) ====================
 def create_enhanced_excel_export(
     merged_df: pd.DataFrame,
     df_2b: pd.DataFrame,
@@ -2036,7 +2036,8 @@ def create_enhanced_excel_export(
     include_subtotals: bool = False
 ) -> bytes:
     """
-    Create enhanced Excel export - ERROR-FREE xlsxwriter API usage
+    Create enhanced Excel export - FIXED write_url error
+    - Changed 'format' parameter to 'cell_format'
     - NO subtotal formulas in Reconciliation sheet
     - Enhanced Summary with match status, charts, top 10 parties
     - Hyperlinks and formulas for easy navigation
@@ -2046,7 +2047,7 @@ def create_enhanced_excel_export(
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         workbook = writer.book
         
-        # Define formats - Using CORRECT xlsxwriter API
+        # Define formats
         header_format = workbook.add_format({
             'bold': True, 'bg_color': '#1e40af', 'font_color': 'white', 
             'border': 1, 'align': 'center', 'valign': 'vcenter', 'text_wrap': True,
@@ -2061,11 +2062,12 @@ def create_enhanced_excel_export(
             'border': 1, 'align': 'left', 'valign': 'top'
         })
         
+        # FIXED: Use 'bold' key instead of set_font_weight()
         link_format = workbook.add_format({
-            'font_color': 'blue', 'underline': 1, 'border': 1
+            'font_color': 'blue', 'underline': 1, 'border': 1, 'bold': True
         })
         
-        # Status formats - Using set_bold() NOT set_font_weight()
+        # Status formats
         status_formats = {
             'Exact': workbook.add_format({'bg_color': '#d1fae5', 'font_color': '#065f46', 'border': 1, 'bold': True}),
             'Suggested': workbook.add_format({'bg_color': '#cffafe', 'font_color': '#0e7490', 'border': 1, 'bold': True}),
@@ -2217,7 +2219,8 @@ def create_enhanced_excel_export(
             summary_ws.write_formula(row_idx, 2, f'=COUNTIF(Reconciliation!A:A, "{status}")', number_format)
             summary_ws.write(row_idx, 3, taxable_2b, number_format)
             summary_ws.write(row_idx, 4, taxable_pr, number_format)
-            summary_ws.write_url(row_idx, 5, f"internal:'Reconciliation'!A1", string='View', format=link_format)
+            # FIXED: Changed 'format' to 'cell_format'
+            summary_ws.write_url(row_idx, 5, f"internal:'Reconciliation'!A1", string='View', cell_format=link_format)
             
             row_idx += 1
         
@@ -2260,7 +2263,8 @@ def create_enhanced_excel_export(
             summary_ws.write(row_idx, 0, rank, number_format)
             summary_ws.write(row_idx, 1, row['Supplier Name'], text_format)
             summary_ws.write(row_idx, 2, row['Total Taxable Value'], number_format)
-            summary_ws.write_url(row_idx, 3, f"internal:'Reconciliation'!A1", string='View Records', format=link_format)
+            # FIXED: Changed 'format' to 'cell_format'
+            summary_ws.write_url(row_idx, 3, f"internal:'Reconciliation'!A1", string='View Records', cell_format=link_format)
             row_idx += 1
         
         row_idx += 2
@@ -2282,7 +2286,8 @@ def create_enhanced_excel_export(
             summary_ws.write(row_idx, 0, rank, number_format)
             summary_ws.write(row_idx, 1, row['Supplier Name'], text_format)
             summary_ws.write(row_idx, 2, row['Total Taxable Value'], number_format)
-            summary_ws.write_url(row_idx, 3, f"internal:'Reconciliation'!A1", string='View Records', format=link_format)
+            # FIXED: Changed 'format' to 'cell_format'
+            summary_ws.write_url(row_idx, 3, f"internal:'Reconciliation'!A1", string='View Records', cell_format=link_format)
             row_idx += 1
         
         # Formulas Reference
@@ -2792,7 +2797,7 @@ st.markdown("""
     <div class="brand">🧾 GST Recon Pro v6.0</div>
     <div class="credits">Enterprise GST Reconciliation Engine</div>
     <div class="credits">Developed by <strong>ABHISHEK JAKKULA</strong> • jakkulaabhishek5@gmail.com</div>
-    <div class="version">v6.0.3 • Error-Free • Enhanced UI • May 2026</div>
+    <div class="version">v6.0.4 • Fixed write_url Error • Enhanced Visibility • May 2026</div>
     <div style="margin-top: 20px; display: flex; justify-content: center; gap: 20px; flex-wrap: wrap;">
         <a href="#" style="color: var(--text-secondary); text-decoration: none; font-size: 0.9rem; font-weight: 500;">📚 Documentation</a>
         <a href="#" style="color: var(--text-secondary); text-decoration: none; font-size: 0.9rem; font-weight: 500;">🎥 Tutorials</a>
