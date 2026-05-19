@@ -3,7 +3,7 @@
 # ============================================================================
 # Author: Abhishek Jakkula
 # Email: jakkulaabhishek5@gmail.com
-# Version: 6.0.5 (5 Status Types • Signed Tax Diff • No Charts Sheet)
+# Version: 6.0.6 (4 Status Types • Suggested for Tolerance Matches • No Charts Sheet)
 # Last Updated: May 2026
 # License: Proprietary - Enterprise Edition
 # ============================================================================
@@ -247,7 +247,6 @@ st.markdown("""
     }
     .status-exact { background: var(--success-light); color: var(--success-text); border-color: var(--success); }
     .status-suggested { background: var(--accent-light); color: var(--accent-text); border-color: var(--accent); }
-    .status-mismatch { background: var(--warning-light); color: var(--warning-text); border-color: var(--warning); }
     .status-missing-2b { background: var(--error-light); color: var(--error-text); border-color: var(--error); }
     .status-missing-pr { background: var(--info-light); color: var(--info-text); border-color: var(--info); }
 
@@ -298,7 +297,6 @@ st.markdown("""
     .match-status-card:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); border-color: var(--primary); }
     .match-status-card.exact { border-left-color: var(--success); }
     .match-status-card.suggested { border-left-color: var(--accent); }
-    .match-status-card.mismatch { border-left-color: var(--warning); }
     .match-status-card.missing-2b { border-left-color: var(--error); }
     .match-status-card.missing-pr { border-left-color: var(--info); }
     .match-status-card .status-header {
@@ -397,9 +395,6 @@ st.markdown("""
 
     .df-exact { color: var(--success-text) !important; background-color: rgba(5, 150, 105, 0.1) !important; font-weight: 700 !important; }
     .df-suggested { color: var(--accent-text) !important; background-color: rgba(8, 145, 178, 0.1) !important; font-weight: 700 !important; }
-    .df-value-mismatch { color: var(--warning-text) !important; background-color: rgba(217, 119, 6, 0.1) !important; font-weight: 700 !important; }
-    .df-doc-type-mismatch { color: var(--secondary-text) !important; background-color: rgba(124, 58, 237, 0.1) !important; font-weight: 700 !important; }
-    .df-cross-state { color: var(--primary-text) !important; background-color: rgba(79, 70, 229, 0.1) !important; font-weight: 700 !important; }
     .df-missing-2b { color: var(--error-text) !important; background-color: rgba(220, 38, 38, 0.1) !important; font-weight: 700 !important; }
     .df-missing-pr { color: var(--info-text) !important; background-color: rgba(37, 99, 235, 0.1) !important; font-weight: 700 !important; }
 
@@ -541,7 +536,7 @@ with st.sidebar:
     <div style="text-align: center; padding: 24px 0; border-bottom: 2px solid var(--border-color); margin-bottom: 20px;">
         <div style="font-size: 3rem; margin-bottom: 6px; display: inline-flex; align-items: center; justify-content: center; width: 72px; height: 72px; background: linear-gradient(135deg, var(--primary), var(--secondary)); border-radius: var(--radius-lg); color: white; box-shadow: var(--shadow-lg); font-weight: 700;">🧾</div>
         <h3 style="margin: 12px 0 3px 0; color: var(--text-primary); font-size: 1.4rem; font-weight: 800;">GST Recon Pro</h3>
-        <p style="margin: 0; color: var(--text-tertiary); font-size: 0.9rem; font-weight: 500;">v6.0.5 • Enterprise</p>
+        <p style="margin: 0; color: var(--text-tertiary); font-size: 0.9rem; font-weight: 500;">v6.0.6 • Enterprise</p>
         <div style="margin-top: 10px;">
             <span style="display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; background: var(--success-light); color: var(--success-text); border-radius: var(--radius-full); font-size: 0.75rem; font-weight: 700; border: 1px solid var(--success);">✅ Ready</span>
         </div>
@@ -614,10 +609,9 @@ with st.sidebar:
         - Dates: DD-MM-YYYY, YYYY-MM-DD
         - Values: Credit Notes = NEGATIVE
         
-        **🎯 Matching Logic (5 Statuses)**
-        - Exact: GSTIN + Doc No + Type + Values match exactly
-        - Suggested: PAN + Normalized Doc + Values close + Date within tolerance
-        - Mismatch: Same document but amounts differ beyond tolerance
+        **🎯 Matching Logic (4 Statuses)**
+        - Exact: GSTIN + Doc No + Type + Values match exactly (no difference)
+        - Suggested: Same document but values within tolerance OR date within tolerance
         - Missing in 2B: Present in PR but not in GSTR-2B
         - Missing in PR: Present in 2B but not in Purchase Register
         
@@ -676,7 +670,7 @@ st.markdown("""
         Real-time Insights • Compliance Reports • Credit/Debit Note Support • 
         Enterprise Security • Professional Export • Error-Free Processing
     </p>
-    <div class="badge">🚀 5 Status Types • Signed Tax Diff • No Charts Sheet</div>
+    <div class="badge">🚀 4 Status Types • Suggested for Tolerance • No Charts Sheet</div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -823,14 +817,13 @@ def generate_file_hash(file_bytes: bytes) -> str:
     return hashlib.md5(file_bytes).hexdigest()
 
 def get_status_css_class(status_value) -> str:
-    """Returns proper CSS property string for pandas Styler - ONLY 5 STATUSES"""
+    """Returns proper CSS property string for pandas Styler - ONLY 4 STATUSES"""
     if pd.isna(status_value):
         return ''
     status_lower = str(status_value).lower().strip()
     css_map = {
         'exact': 'color: #065f46; background-color: rgba(5, 150, 105, 0.12); font-weight: 700;',
         'suggested': 'color: #155e75; background-color: rgba(8, 145, 178, 0.12); font-weight: 700;',
-        'mismatch': 'color: #92400e; background-color: rgba(217, 119, 6, 0.12); font-weight: 700;',
         'missing in 2b': 'color: #991b1b; background-color: rgba(220, 38, 38, 0.12); font-weight: 700;',
         'missing in pr': 'color: #1e40af; background-color: rgba(37, 99, 235, 0.12); font-weight: 700;',
         'other': 'color: #475569; background-color: rgba(100, 116, 139, 0.08); font-weight: 600;',
@@ -958,7 +951,7 @@ st.markdown("</div>", unsafe_allow_html=True)
 # ==================== MAIN PROCESSING FUNCTION ====================
 @st.cache_data(show_spinner=False, ttl=3600)
 def process_reconciliation(file_2b_bytes: bytes, file_pr_bytes: bytes, tolerance: float, date_tol_days: int, include_rc: bool, handle_cdn_neg: bool, fuzzy_threshold: float, validate_gstin_flag: bool, strict_fy: bool) -> Tuple[pd.DataFrame, int, pd.DataFrame, pd.DataFrame, Dict]:
-    """Main reconciliation engine with 5 status types and signed tax difference"""
+    """Main reconciliation engine with 4 status types: Exact, Suggested, Missing in 2B, Missing in PR"""
     start_time = time.time()
     logger.info("Starting reconciliation process")
     
@@ -1081,23 +1074,30 @@ def process_reconciliation(file_2b_bytes: bytes, file_pr_bytes: bytes, tolerance
         else:
             merged['NAME_FUZZY_MATCH'] = pd.Series([True] * len(merged))
         
-        # DEFINE MATCHING LOGIC WITH ONLY 5 STATUSES
+        # DEFINE MATCHING LOGIC WITH ONLY 4 STATUSES (NO MISMATCH)
         conditions = [
-            # 1. Exact Match
+            # 1. Exact Match: All parameters match exactly (no tolerance)
             (merged['_merge'] == 'both') & exact_gstin & exact_doc & same_doc_type & tax_exact,
-            # 2. Suggested Match
-            (merged['_merge'] == 'both') & same_pan & norm_doc_match & same_doc_type & tax_within_tol & within_date_tol & within_fy & merged['NAME_FUZZY_MATCH'] & ~((merged['_merge'] == 'both') & exact_gstin & exact_doc & same_doc_type & tax_exact),
-            # 3. Mismatch (Value Mismatch)
-            (merged['_merge'] == 'both') & exact_gstin & exact_doc & same_doc_type & ~tax_within_tol,
-            # 4. Missing in PR
-            (merged['_merge'] == 'right_only'),
-            # 5. Missing in 2B
+            
+            # 2. Suggested Match: Same document but values within tolerance OR date within tolerance
+            # This captures what was previously "Mismatch" - values differ but within tolerance
+            (merged['_merge'] == 'both') & same_pan & norm_doc_match & same_doc_type & tax_within_tol,
+            
+            # 3. Missing in PR: Present in 2B but not in PR
             (merged['_merge'] == 'left_only'),
+            
+            # 4. Missing in 2B: Present in PR but not in 2B
+            (merged['_merge'] == 'right_only'),
         ]
         
-        # ONLY 5 STATUSES
-        statuses = ['Exact', 'Suggested', 'Mismatch', 'Missing in PR', 'Missing in 2B']
-        reasons = ['All parameters matching exactly', 'Date differs within tolerance, values close, same DOC_TYPE', 'Document matches but amounts differ beyond tolerance', 'Present in Purchase Register but missing in GSTR-2B', 'Present in GSTR-2B but missing in Purchase Register']
+        # ONLY 4 STATUSES - NO MISMATCH
+        statuses = ['Exact', 'Suggested', 'Missing in PR', 'Missing in 2B']
+        reasons = [
+            'All parameters matching exactly (GSTIN, Doc No, Type, Values)',
+            'Same document but values within tolerance or date differs within tolerance',
+            'Present in GSTR-2B but not recorded in Purchase Register',
+            'Present in Purchase Register but missing in GSTR-2B'
+        ]
         
         merged['MATCH_STATUS'] = np.select(conditions, statuses, default='Other')
         merged['MATCH_REASON'] = np.select(conditions, reasons, default='Unable to determine')
@@ -1109,7 +1109,7 @@ def process_reconciliation(file_2b_bytes: bytes, file_pr_bytes: bytes, tolerance
                 return 'ELIGIBLE'
             elif row['MATCH_STATUS'] == 'Suggested':
                 return 'REVIEW REQUIRED'
-            elif row['MATCH_STATUS'] in ['Missing in 2B', 'Mismatch']:
+            elif row['MATCH_STATUS'] == 'Missing in 2B':
                 return 'NOT ELIGIBLE'
             elif row['MATCH_STATUS'] == 'Missing in PR':
                 return 'PENDING BOOKS ENTRY'
@@ -1125,7 +1125,7 @@ def process_reconciliation(file_2b_bytes: bytes, file_pr_bytes: bytes, tolerance
         stats = {
             'processing_time_sec': round(processing_time, 2), 'total_2b_records': len(df_2b), 'total_pr_records': len(df_pr),
             'merged_records': len(merged), 'exact_matches': (merged['MATCH_STATUS'] == 'Exact').sum(),
-            'suggested_matches': (merged['MATCH_STATUS'] == 'Suggested').sum(), 'mismatches': (merged['MATCH_STATUS'] == 'Mismatch').sum(),
+            'suggested_matches': (merged['MATCH_STATUS'] == 'Suggested').sum(),
             'missing_in_2b': (merged['MATCH_STATUS'] == 'Missing in 2B').sum(), 'missing_in_pr': (merged['MATCH_STATUS'] == 'Missing in PR').sum(),
             'duplicate_pr_keys': dup_pr_count,
         }
@@ -1137,9 +1137,9 @@ def process_reconciliation(file_2b_bytes: bytes, file_pr_bytes: bytes, tolerance
         logger.error(f"Reconciliation failed: {str(e)}", exc_info=True)
         raise
 
-# ==================== ENHANCED EXCEL EXPORT (NO CHARTS SHEET) ====================
+# ==================== ENHANCED EXCEL EXPORT (NO CHARTS SHEET, 4 STATUSES) ====================
 def create_enhanced_excel_export(merged_df: pd.DataFrame, df_2b: pd.DataFrame, df_pr: pd.DataFrame, stats: Dict, include_charts: bool = True, include_raw_data: bool = True, add_dropdown: bool = True, include_subtotals: bool = False) -> bytes:
-    """Create enhanced Excel export - NO CHARTS SHEET, 5 statuses, signed tax diff"""
+    """Create enhanced Excel export - NO CHARTS SHEET, 4 statuses, signed tax diff"""
     output = io.BytesIO()
     
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
@@ -1151,11 +1151,10 @@ def create_enhanced_excel_export(merged_df: pd.DataFrame, df_2b: pd.DataFrame, d
         text_format = workbook.add_format({'border': 1, 'align': 'left', 'valign': 'top'})
         link_format = workbook.add_format({'font_color': 'blue', 'underline': 1, 'border': 1, 'bold': True})
         
-        # Status formats (ONLY 5 statuses)
+        # Status formats (ONLY 4 statuses)
         status_formats = {
             'Exact': workbook.add_format({'bg_color': '#d1fae5', 'font_color': '#065f46', 'border': 1, 'bold': True}),
             'Suggested': workbook.add_format({'bg_color': '#cffafe', 'font_color': '#0e7490', 'border': 1, 'bold': True}),
-            'Mismatch': workbook.add_format({'bg_color': '#fef3c7', 'font_color': '#92400e', 'border': 1, 'bold': True}),
             'Missing in 2B': workbook.add_format({'bg_color': '#fee2e2', 'font_color': '#991b1b', 'border': 1, 'bold': True}),
             'Missing in PR': workbook.add_format({'bg_color': '#dbeafe', 'font_color': '#1e40af', 'border': 1, 'bold': True}),
         }
@@ -1224,7 +1223,7 @@ def create_enhanced_excel_export(merged_df: pd.DataFrame, df_2b: pd.DataFrame, d
         # Key Metrics
         summary_ws.merge_range(f'A{row_idx}:C{row_idx}', '🔑 Key Metrics', header_format)
         row_idx += 1
-        metrics = [('Total Records Processed', stats.get('merged_records', 0)), ('Exact Matches', stats.get('exact_matches', 0)), ('Suggested Matches', stats.get('suggested_matches', 0)), ('Mismatches', stats.get('mismatches', 0)), ('Missing in GSTR-2B', stats.get('missing_in_2b', 0)), ('Missing in PR', stats.get('missing_in_pr', 0))]
+        metrics = [('Total Records Processed', stats.get('merged_records', 0)), ('Exact Matches', stats.get('exact_matches', 0)), ('Suggested Matches', stats.get('suggested_matches', 0)), ('Missing in GSTR-2B', stats.get('missing_in_2b', 0)), ('Missing in PR', stats.get('missing_in_pr', 0))]
         for label, value in metrics:
             summary_ws.write(f'A{row_idx}', label, text_format)
             summary_ws.write(f'C{row_idx}', value, number_format)
@@ -1238,9 +1237,9 @@ def create_enhanced_excel_export(merged_df: pd.DataFrame, df_2b: pd.DataFrame, d
             summary_ws.write(row_idx, col, header, header_format)
         row_idx += 1
         
-        # ONLY 5 STATUSES
+        # ONLY 4 STATUSES
         status_values = {}
-        for status in ['Exact', 'Suggested', 'Mismatch', 'Missing in 2B', 'Missing in PR']:
+        for status in ['Exact', 'Suggested', 'Missing in 2B', 'Missing in PR']:
             mask = merged_df['MATCH_STATUS'] == status
             count = mask.sum()
             taxable_2b = merged_df.loc[mask, 'TAXABLE_VALUE_2B'].sum()
@@ -1312,7 +1311,7 @@ def create_enhanced_excel_export(merged_df: pd.DataFrame, df_2b: pd.DataFrame, d
         row_idx += 2
         summary_ws.merge_range(f'A{row_idx}:C{row_idx}', '📐 Formula Reference', header_format)
         row_idx += 1
-        formulas = [('Exact Match Count', '=COUNTIF(Reconciliation!A:A, "Exact")', 'Counts exact matches'), ('Suggested Match Count', '=COUNTIF(Reconciliation!A:A, "Suggested")', 'Counts suggested matches'), ('Mismatch Count', '=COUNTIF(Reconciliation!A:A, "Mismatch")', 'Counts value mismatches'), ('Missing in 2B', '=COUNTIF(Reconciliation!A:A, "Missing in 2B")', 'Records in PR not in 2B'), ('Missing in PR', '=COUNTIF(Reconciliation!A:A, "Missing in PR")', 'Records in 2B not in PR'), ('Match Rate %', '=(B7+B8)/B6*100', 'Percentage of matched records'), ('Total Taxable (2B)', '=SUM(Reconciliation!O:O)', 'Sum of taxable from GSTR-2B'), ('Total Taxable (PR)', '=SUM(Reconciliation!P:P)', 'Sum of taxable from Purchase Register')]
+        formulas = [('Exact Match Count', '=COUNTIF(Reconciliation!A:A, "Exact")', 'Counts exact matches'), ('Suggested Match Count', '=COUNTIF(Reconciliation!A:A, "Suggested")', 'Counts matches within tolerance'), ('Missing in 2B', '=COUNTIF(Reconciliation!A:A, "Missing in 2B")', 'Records in PR not in 2B'), ('Missing in PR', '=COUNTIF(Reconciliation!A:A, "Missing in PR")', 'Records in 2B not in PR'), ('Match Rate %', '=(B7+B8)/B6*100', 'Percentage of matched records'), ('Total Taxable (2B)', '=SUM(Reconciliation!O:O)', 'Sum of taxable from GSTR-2B'), ('Total Taxable (PR)', '=SUM(Reconciliation!P:P)', 'Sum of taxable from Purchase Register')]
         for formula_name, formula, description in formulas:
             summary_ws.write(row_idx, 0, formula_name, text_format)
             summary_ws.write(row_idx, 1, formula, text_format)
@@ -1349,7 +1348,6 @@ if file_2b and file_pr:
             total_records = len(merged_df)
             exact_count = int(status_counts.get('Exact', 0))
             suggested_count = int(status_counts.get('Suggested', 0))
-            mismatch_count = int(status_counts.get('Mismatch', 0))
             missing_2b = int(status_counts.get('Missing in 2B', 0))
             missing_pr = int(status_counts.get('Missing in PR', 0))
             
@@ -1372,7 +1370,7 @@ if file_2b and file_pr:
             
             # ==================== DASHBOARD METRICS ====================
             st.markdown("""<div class="section-card animate-fade-in"><h3><span class="icon">📊</span> Live Reconciliation Dashboard</h3></div>""", unsafe_allow_html=True)
-            m1, m2, m3, m4, m5 = st.columns(5)
+            m1, m2, m3, m4 = st.columns(4)
             with m1:
                 st.markdown(f"""<div class="metric-card"><span class="metric-icon">📋</span><div class="metric-label">Total Records</div><div class="metric-value">{total_records:,}</div><div class="metric-subtitle">All documents processed</div></div>""", unsafe_allow_html=True)
             with m2:
@@ -1380,18 +1378,15 @@ if file_2b and file_pr:
                 delta_text = '✓ Excellent' if match_rate >= 90 else '✓ Good' if match_rate >= 80 else '⚠ Review'
                 st.markdown(f"""<div class="metric-card"><span class="metric-icon">✅</span><div class="metric-label">Match Rate</div><div class="metric-value">{match_rate:.1f}%</div><div class="metric-delta {delta_class}">{delta_text}</div></div>""", unsafe_allow_html=True)
             with m3:
-                st.markdown(f"""<div class="metric-card"><span class="metric-icon">🔍</span><div class="metric-label">Suggested</div><div class="metric-value">{suggested_count:,}</div><div class="metric-subtitle">Needs manual review</div></div>""", unsafe_allow_html=True)
-            with m4:
                 st.markdown(f"""<div class="metric-card"><span class="metric-icon">💰</span><div class="metric-label">Unclaimed ITC</div><div class="metric-value">{format_currency(unclaimed_itc)}</div><div class="metric-delta positive">Cash flow opportunity</div></div>""", unsafe_allow_html=True)
-            with m5:
+            with m4:
                 st.markdown(f"""<div class="metric-card"><span class="metric-icon">⚠️</span><div class="metric-label">Risk Claims</div><div class="metric-value">{format_currency(risky_claims)}</div><div class="metric-delta negative">Compliance risk</div></div>""", unsafe_allow_html=True)
             
-            # ==================== MATCH STATUS SUMMARY (5 STATUSES) ====================
+            # ==================== MATCH STATUS SUMMARY (4 STATUSES) ====================
             st.markdown("""<div class="section-card animate-fade-in"><h3><span class="icon">📋</span> Match Status Breakdown</h3><p style="color: var(--text-secondary); margin-bottom: 18px; font-weight: 500;">Detailed breakdown with direct links to filtered views.</p></div>""", unsafe_allow_html=True)
             status_cards = [
                 {'status': 'Exact', 'count': exact_count, 'desc': 'Perfect matches - GSTIN, Doc No, Type & Values identical', 'color': 'exact', 'icon': '✅', 'link': 'View Exact Matches →'},
-                {'status': 'Suggested', 'count': suggested_count, 'desc': 'Potential matches - Date differs within tolerance, values close', 'color': 'suggested', 'icon': '🔍', 'link': 'Review Suggested →'},
-                {'status': 'Mismatch', 'count': mismatch_count, 'desc': 'Same document but taxable/tax amounts differ beyond tolerance', 'color': 'mismatch', 'icon': '⚠️', 'link': 'Check Mismatches →'},
+                {'status': 'Suggested', 'count': suggested_count, 'desc': 'Values within tolerance or date differs - review recommended', 'color': 'suggested', 'icon': '🔍', 'link': 'Review Suggested →'},
                 {'status': 'Missing in PR', 'count': missing_pr, 'desc': 'Present in GSTR-2B but not recorded in Purchase Register', 'color': 'missing-pr', 'icon': '📥', 'link': 'Add to Books →'},
                 {'status': 'Missing in 2B', 'count': missing_2b, 'desc': 'Claimed in books but not appearing in GSTR-2B', 'color': 'missing-2b', 'icon': '🔎', 'link': 'Verify Claims →'},
             ]
@@ -1418,31 +1413,19 @@ if file_2b and file_pr:
             
             # ==================== CHARTS (NO CHARTS SHEET IN EXPORT) ====================
             st.markdown("""<div class="section-card animate-fade-in"><h3><span class="icon">📈</span> Visual Analytics</h3></div>""", unsafe_allow_html=True)
-            tab1, tab2, tab3 = st.tabs(["📊 Status Distribution", "🏆 Top Parties", "🔍 Details"])
+            tab1, tab2 = st.tabs(["📊 Status Distribution", "🔍 Details"])
             with tab1:
                 status_data = merged_df['MATCH_STATUS'].value_counts().reset_index()
                 status_data.columns = ['Status', 'Count']
-                color_map = {'Exact': '#10b981', 'Suggested': '#06b6d4', 'Mismatch': '#f97316', 'Missing in 2B': '#ef4444', 'Missing in PR': '#3b82f6', 'Other': '#64748b'}
+                color_map = {'Exact': '#10b981', 'Suggested': '#06b6d4', 'Missing in 2B': '#ef4444', 'Missing in PR': '#3b82f6', 'Other': '#64748b'}
                 fig_status = px.pie(status_data, values='Count', names='Status', color='Status', color_discrete_map=color_map, hole=0.5, title='Reconciliation Status Distribution')
                 fig_status.update_traces(textposition='inside', textinfo='percent+label')
                 fig_status.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', legend=dict(orientation='h', yanchor='bottom', y=-0.2, xanchor='center', x=0.5), height=450, margin=dict(t=50, b=50, l=20, r=20))
                 st.plotly_chart(fig_status, use_container_width=True)
             with tab2:
-                col_chart1, col_chart2 = st.columns(2)
-                with col_chart1:
-                    st.markdown("##### Top 10 Suppliers - GSTR-2B")
-                    fig_top2b = px.bar(top_10_2b.head(10), x='Taxable Value', y='Supplier', orientation='h', title='Top 10 by Taxable Value (2B)', color='Taxable Value', color_continuous_scale='Blues')
-                    fig_top2b.update_layout(height=400, margin=dict(t=40, b=40, l=20, r=20))
-                    st.plotly_chart(fig_top2b, use_container_width=True)
-                with col_chart2:
-                    st.markdown("##### Top 10 Suppliers - Purchase Register")
-                    fig_toppr = px.bar(top_10_pr.head(10), x='Taxable Value', y='Supplier', orientation='h', title='Top 10 by Taxable Value (PR)', color='Taxable Value', color_continuous_scale='Greens')
-                    fig_toppr.update_layout(height=400, margin=dict(t=40, b=40, l=20, r=20))
-                    st.plotly_chart(fig_toppr, use_container_width=True)
-            with tab3:
                 col_f1, col_f2, col_f3 = st.columns(3)
                 with col_f1:
-                    status_filter = st.multiselect("Filter Status", ['Exact', 'Suggested', 'Mismatch', 'Missing in 2B', 'Missing in PR'], default=['Exact', 'Suggested', 'Mismatch', 'Missing in 2B', 'Missing in PR'], key="status_filter_multiselect")
+                    status_filter = st.multiselect("Filter Status", ['Exact', 'Suggested', 'Missing in 2B', 'Missing in PR'], default=['Exact', 'Suggested', 'Missing in 2B', 'Missing in PR'], key="status_filter_multiselect")
                 with col_f2:
                     search = st.text_input("🔎 Search Supplier", placeholder="Type to search...", key="supplier_search")
                 with col_f3:
@@ -1464,7 +1447,7 @@ if file_2b and file_pr:
             if missing_2b > 0: insights.append({'type': 'error', 'icon': '🚨', 'title': 'Compliance Risk', 'message': f"**{format_currency(risky_claims)}** claimed in books but missing from GSTR-2B. May lead to ITC reversal."})
             if match_rate < 80: insights.append({'type': 'warning', 'icon': '🔄', 'title': 'Reconciliation Health', 'message': f"Match rate is **{match_rate:.1f}%**. Review document numbering and date formats."})
             elif match_rate >= 95: insights.append({'type': 'success', 'icon': '✅', 'title': 'Excellent Health', 'message': f"Outstanding match rate of **{match_rate:.1f}%**! GST compliance is excellent."})
-            if suggested_count > 0: insights.append({'type': 'info', 'icon': '🕒', 'title': 'Date Mismatches', 'message': f"**{suggested_count} records** have date differences within tolerance. Review for accurate reporting."})
+            if suggested_count > 0: insights.append({'type': 'info', 'icon': '🕒', 'title': 'Tolerance Matches', 'message': f"**{suggested_count} records** have values within tolerance. Review for accurate reporting."})
             if not insights: insights.append({'type': 'success', 'icon': '🎉', 'title': 'All Clear', 'message': "No critical issues detected. GST reconciliation is healthy!"})
             for i, insight in enumerate(insights):
                 st.markdown(f"""<div class="insight-card {insight['type']} animate-fade-in" style="animation-delay: {i*0.1}s"><span class="insight-icon">{insight['icon']}</span><div class="insight-content"><div class="insight-title">{insight['title']}</div><div class="insight-message">{insight['message']}</div></div></div>""", unsafe_allow_html=True)
@@ -1473,7 +1456,7 @@ if file_2b and file_pr:
             st.markdown("""<div class="section-card animate-fade-in"><h3><span class="icon">📤</span> Export Enhanced Report</h3></div>""", unsafe_allow_html=True)
             col_export1, col_export2 = st.columns([3, 1])
             with col_export1:
-                st.markdown("""<div style="background: rgba(79, 70, 229, 0.05); border-radius: 12px; padding: 18px; border: 2px solid var(--border-color);"><strong>📋 Enhanced Report Includes:</strong><ul style="margin: 8px 0 0 20px; color: var(--text-secondary); line-height: 1.7; font-weight: 500;"><li>✅ <strong>Reconciliation Sheet</strong> - All columns, 5 status types</li><li>📊 <strong>Enhanced Summary</strong> with match status, formulas, hyperlinks</li><li>🏆 <strong>Top 10 Parties</strong> from 2B & PR with clickable links</li><li>📑 <strong>Raw Data Sheets</strong> - Complete audit trail</li><li>🔽 <strong>DOC_TYPE dropdown</strong> validation</li><li>🚫 <strong>No Charts Sheet</strong> - As requested</li></ul></div>""", unsafe_allow_html=True)
+                st.markdown("""<div style="background: rgba(79, 70, 229, 0.05); border-radius: 12px; padding: 18px; border: 2px solid var(--border-color);"><strong>📋 Enhanced Report Includes:</strong><ul style="margin: 8px 0 0 20px; color: var(--text-secondary); line-height: 1.7; font-weight: 500;"><li>✅ <strong>Reconciliation Sheet</strong> - All columns, 4 status types</li><li>📊 <strong>Enhanced Summary</strong> with match status, formulas, hyperlinks</li><li>🏆 <strong>Top 10 Parties</strong> from 2B & PR with clickable links</li><li>📑 <strong>Raw Data Sheets</strong> - Complete audit trail</li><li>🔽 <strong>DOC_TYPE dropdown</strong> validation</li><li>🚫 <strong>No Charts Sheet</strong> - As requested</li></ul></div>""", unsafe_allow_html=True)
             with col_export2:
                 excel_output = create_enhanced_excel_export(merged_df, df_2b, df_pr, stats, include_charts=include_charts, include_raw_data=include_raw_data, add_dropdown=add_dropdown_validation, include_subtotals=False)
                 st.download_button(label="⚡ Download Enhanced Excel", data=excel_output, file_name=f"GST_Recon_Enhanced_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True, key="btn_download_excel_enhanced", help="Download comprehensive report with enhanced summary")
@@ -1494,7 +1477,7 @@ else:
     st.markdown("""<div class="section-card animate-fade-in" style="text-align: center; padding: 56px 40px;"><div style="font-size: 4rem; margin-bottom: 20px; display: inline-flex; align-items: center; justify-content: center; width: 110px; height: 110px; background: linear-gradient(135deg, var(--primary), var(--secondary)); border-radius: var(--radius-xl); color: white; box-shadow: var(--shadow-2xl); font-weight: 700;">🧾✨</div><h2 style="margin: 0 0 16px 0; font-size: 1.9rem; font-weight: 800;">Welcome to GST Recon Pro v6.0</h2><p style="color: var(--text-secondary); font-size: 1.1rem; max-width: 680px; margin: 0 auto 32px auto; line-height: 1.7; font-weight: 500;">Upload your GSTR-2B and Purchase Register files to begin intelligent reconciliation. AI-powered matching, Credit/Debit Note support, compliance reports, enterprise security.</p><div class="quick-actions"><div class="quick-action-btn"><span class="icon">📁</span><span class="label">Upload Files</span></div><div class="quick-action-btn"><span class="icon">📥</span><span class="label">Get Samples</span></div><div class="quick-action-btn"><span class="icon">📉</span><span class="label">CDN Support</span></div><div class="quick-action-btn"><span class="icon">📊</span><span class="label">Live Insights</span></div></div><div style="margin-top: 40px; padding-top: 24px; border-top: 2px solid var(--border-color);"><p style="color: var(--text-secondary); font-size: 0.9rem; line-height: 1.6; font-weight: 500;"><strong>💡 Pro Tips:</strong><br>• Credit Notes: <strong>negative taxable/tax values</strong><br>• DOC_TYPE: INVOICE / CREDIT / DEBIT<br>• Month: <strong>JANUARY-25, FEBRUARY-25</strong><br>• GSTIN: 15 characters (e.g., 36AADCR6281N1ZT)<br>• Press <strong>Ctrl+T</strong> to toggle theme</p></div></div>""", unsafe_allow_html=True)
 
 # ==================== FOOTER ====================
-st.markdown("""<div class="footer"><div class="brand">🧾 GST Recon Pro v6.0</div><div class="credits">Enterprise GST Reconciliation Engine</div><div class="credits">Developed by <strong>ABHISHEK JAKKULA</strong> • jakkulaabhishek5@gmail.com</div><div class="version">v6.0.5 • 5 Status Types • Signed Tax Diff • No Charts Sheet • May 2026</div><div style="margin-top: 20px; display: flex; justify-content: center; gap: 20px; flex-wrap: wrap;"><a href="#" style="color: var(--text-secondary); text-decoration: none; font-size: 0.9rem; font-weight: 500;">📚 Documentation</a><a href="#" style="color: var(--text-secondary); text-decoration: none; font-size: 0.9rem; font-weight: 500;">🎥 Tutorials</a><a href="#" style="color: var(--text-secondary); text-decoration: none; font-size: 0.9rem; font-weight: 500;">🔧 Support</a><a href="#" style="color: var(--text-secondary); text-decoration: none; font-size: 0.9rem; font-weight: 500;">🐛 Report Bug</a></div><div style="margin-top: 14px; font-size: 0.8rem; color: var(--text-tertiary); font-weight: 500;">© 2026 Abhishek Jakkula. All rights reserved. | GST Recon Pro is a proprietary enterprise solution.</div></div>""", unsafe_allow_html=True)
+st.markdown("""<div class="footer"><div class="brand">🧾 GST Recon Pro v6.0</div><div class="credits">Enterprise GST Reconciliation Engine</div><div class="credits">Developed by <strong>ABHISHEK JAKKULA</strong> • jakkulaabhishek5@gmail.com</div><div class="version">v6.0.6 • 4 Status Types • Suggested for Tolerance • No Charts Sheet • May 2026</div><div style="margin-top: 20px; display: flex; justify-content: center; gap: 20px; flex-wrap: wrap;"><a href="#" style="color: var(--text-secondary); text-decoration: none; font-size: 0.9rem; font-weight: 500;">📚 Documentation</a><a href="#" style="color: var(--text-secondary); text-decoration: none; font-size: 0.9rem; font-weight: 500;">🎥 Tutorials</a><a href="#" style="color: var(--text-secondary); text-decoration: none; font-size: 0.9rem; font-weight: 500;">🔧 Support</a><a href="#" style="color: var(--text-secondary); text-decoration: none; font-size: 0.9rem; font-weight: 500;">🐛 Report Bug</a></div><div style="margin-top: 14px; font-size: 0.8rem; color: var(--text-tertiary); font-weight: 500;">© 2026 Abhishek Jakkula. All rights reserved. | GST Recon Pro is a proprietary enterprise solution.</div></div>""", unsafe_allow_html=True)
 
 # ==================== KEYBOARD SHORTCUTS ====================
 st.markdown("""<script>document.addEventListener('keydown', function(e) { if (e.ctrlKey && e.key === 'r') { e.preventDefault(); if (confirm('Reset session and clear all data?')) { window.location.reload(); } } if (e.ctrlKey && e.key === 'e') { e.preventDefault(); const exportBtn = document.querySelector('button[title*="Download"]'); if (exportBtn) exportBtn.click(); } if (e.ctrlKey && e.key === 's') { e.preventDefault(); const exportBtn = document.querySelector('button[kind="primary"]'); if (exportBtn) exportBtn.click(); } });</script>""", unsafe_allow_html=True)
